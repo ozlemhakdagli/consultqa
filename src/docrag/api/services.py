@@ -42,7 +42,7 @@ from docrag.stub import HashEncoder, StubLLM, StubReader, StubScorer
 logger = logging.getLogger(__name__)
 
 PAPER_PRESET = "paper"
-DEFAULT_PRESET = "L5"
+DEFAULT_PRESET = "L2"
 DB_FILENAME = "docrag.sqlite3"
 QDRANT_COLLECTION_PREFIX = "docrag_"
 

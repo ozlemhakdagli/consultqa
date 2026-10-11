@@ -22,7 +22,7 @@ class AskRequest(BaseModel):
     """Body of a question. ``k`` is the number of passages the LLM reader sees."""
 
     question: BoundedText
-    preset: str = "L5"
+    preset: str = "L2"
     k: int | None = Field(default=None, ge=1, le=20)
 
 

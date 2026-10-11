@@ -244,9 +244,9 @@ def test_search_returns_the_final_ranking_up_to_k(client):
     _upload(client, cid, TWO_SECTIONS)
     body = client.post(f"/api/collections/{cid}/search", json={"query": "Stok", "k": 1}).json()
     assert len(body["hits"]) == 1
-    assert body["hits"][0]["stage"] == "rerank"
+    assert body["hits"][0]["stage"] == "pool"
     assert body["hits"][0]["rank"] == 1
-    assert body["preset"] == "L5"
+    assert body["preset"] == "L2"
 
 
 def test_paper_preset_runs_the_published_method_when_enabled(services, client, monkeypatch):

@@ -1,7 +1,7 @@
 // docrag page logic. Every string from the server is written with textContent.
 
 const POLL_MS = 1000;
-const DEFAULT_PRESET = "L5";
+const DEFAULT_PRESET = "L2";
 
 const MESSAGES = {
   validation_error: "Check the input. Questions and names must not be blank.",
