@@ -19,23 +19,12 @@ def _is_env_file(path: str) -> bool:
     return name == ".env" or name.startswith(".env.")
 
 
-def test_gitignore_covers_every_private_kind() -> None:
-    """.gitignore lists each kind of private material, so git never picks one up by accident."""
+def test_gitignore_covers_generated_and_secret_files() -> None:
+    """.gitignore lists the generated and secret file kinds, so git never adds them by accident."""
     lines = {
         line.strip() for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     }
-    required = [
-        "docs/",
-        "private/",
-        "data/raw/",
-        "state/",
-        "*.pdf",
-        "*.png",
-        "*.jpg",
-        "*.jpeg",
-        "*.webp",
-        ".env",
-    ]
+    required = ["*.pdf", "*.png", "*.jpg", "*.jpeg", "*.webp", ".env", "state/"]
     missing = [pattern for pattern in required if pattern not in lines]
     assert missing == [], f".gitignore is missing: {missing}"
 

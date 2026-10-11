@@ -7,10 +7,6 @@ __pycache__/
 *.egg-info/
 .ruff_cache/
 
-# Private material: never tracked, never copied into images
-private/
-data/raw/
-docs/
 *.pdf
 *.png
 *.jpg
