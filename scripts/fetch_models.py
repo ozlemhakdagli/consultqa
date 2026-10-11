@@ -12,10 +12,9 @@ Run once before the real backend starts:
 Every revision here is a full commit hash, so nothing is fetched at a moving revision.
 """
 
-import shutil
+import subprocess
 from pathlib import Path
 
-import rapidocr
 from huggingface_hub import snapshot_download
 
 from consultqa.config import MODEL_PINS, load_settings
@@ -30,21 +29,13 @@ DOCLING_REPOS = (
     ("docling-project/docling-models", "fc0f2d45e2218ea24bce5045f58a389aed16dc23"),
 )
 
-# Docling's default OCR reads these from artifacts_path / "RapidOcr". The rapidocr wheel ships
-# the same files, so they are copied from the installed package, which is the copy the default
-# install uses.
-RAPIDOCR_FILES = (
-    "PP-OCRv6_det_small.onnx",
-    "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
-    "PP-OCRv6_rec_small.onnx",
-)
 
-
-def _copy_rapidocr_models(target: Path) -> None:
-    source = Path(rapidocr.__file__).resolve().parent / "models"
-    target.mkdir(parents=True, exist_ok=True)
-    for name in RAPIDOCR_FILES:
-        shutil.copyfile(source / name, target / name)
+def rapidocr_command(folder: Path) -> list[str]:
+    """The Docling tool that downloads the RapidOCR torch models Docling's default OCR reads."""
+    return [
+        "docling-tools", "models", "download", "rapidocr",
+        "--rapidocr-backend-lang", "torch:ch", "-o", str(folder),
+    ]  # fmt: skip
 
 
 def main() -> None:
@@ -61,8 +52,9 @@ def main() -> None:
         target = folder / repo_id.replace("/", "--")
         print(f"fetching docling {repo_id} @ {revision} into {target}", flush=True)
         snapshot_download(repo_id=repo_id, revision=revision, local_dir=target)
-    print(f"copying the RapidOCR models into {folder / 'RapidOcr'}", flush=True)
-    _copy_rapidocr_models(folder / "RapidOcr")
+    print(f"downloading the RapidOCR models into {folder / 'RapidOcr'}", flush=True)
+    # The command is fixed by rapidocr_command; the folder is set by the operator.
+    subprocess.run(rapidocr_command(folder), check=True)  # noqa: S603
     print("all pinned models are cached", flush=True)
 
 

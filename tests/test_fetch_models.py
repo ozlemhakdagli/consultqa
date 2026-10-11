@@ -30,13 +30,10 @@ def test_docling_folders_use_the_name_docling_looks_for():
     assert folders == {"docling-project--docling-layout-heron", "docling-project--docling-models"}
 
 
-def test_rapidocr_files_are_the_ones_the_installed_wheel_ships():
-    # Docling's OCR reads these from artifacts_path / "RapidOcr" once artifacts_path is set. The
-    # rapidocr wheel bundles the same files, so the fetch copies them from the installed package.
-    import rapidocr
-
+def test_rapidocr_download_uses_the_torch_backend_into_the_folder(tmp_path):
+    # Docling's default OCR with artifacts_path reads the torch checkpoints (.pth) under RapidOcr.
     fetch = _load_fetch_models()
-    bundled = Path(rapidocr.__file__).resolve().parent / "models"
-    assert fetch.RAPIDOCR_FILES
-    for name in fetch.RAPIDOCR_FILES:
-        assert (bundled / name).is_file(), name
+    command = fetch.rapidocr_command(tmp_path)
+    assert command[:4] == ["docling-tools", "models", "download", "rapidocr"]
+    assert command[command.index("--rapidocr-backend-lang") + 1] == "torch:ch"
+    assert command[command.index("-o") + 1] == str(tmp_path)

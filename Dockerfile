@@ -10,7 +10,7 @@ ENV PATH=/opt/venv/bin:$PATH
 WORKDIR /build
 COPY requirements.txt ./
 # CPU torch comes first, so the pinned torch in requirements.txt is already satisfied.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 \
+RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 torchvision==0.29.1 \
  && pip install -r requirements.txt
 
 COPY pyproject.toml ./
