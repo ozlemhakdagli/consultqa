@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docrag</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>docrag</h1>
+      <p class="lede">Upload documents, then ask a question. Answers cite the passages they use.</p>
+    </header>
+
+    <section class="card" aria-labelledby="collections-heading">
+      <h2 id="collections-heading">Collection</h2>
+      <label for="collection-select">Collection</label>
+      <select id="collection-select" name="collection"></select>
+
+      <form id="collection-form" class="stack">
+        <label for="collection-name">New collection</label>
+        <input id="collection-name" name="name" type="text" maxlength="80" autocomplete="off">
+        <button type="submit">Create collection</button>
+        <p id="collection-status" class="status" role="status" aria-live="polite" hidden></p>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="upload-heading">
+      <h2 id="upload-heading">Upload</h2>
+      <form id="upload-form" class="stack">
+        <label for="upload-file">Document (.pdf, .txt or .md)</label>
+        <input id="upload-file" name="file" type="file" accept=".pdf,.txt,.md">
+        <button id="upload-submit" type="submit">Upload document</button>
+        <p id="upload-status" class="status" role="status" aria-live="polite" hidden></p>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="ask-heading">
+      <h2 id="ask-heading">Ask</h2>
+      <form id="ask-form" class="stack">
+        <label for="question">Question</label>
+        <textarea id="question" name="question" rows="3" maxlength="500" required></textarea>
+
+        <label for="preset-select">Method</label>
+        <select id="preset-select" name="preset"></select>
+
+        <button id="ask-submit" type="submit">Ask</button>
+      </form>
+
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <div id="answer-block" hidden>
+        <h3>Answer</h3>
+        <p id="answer" class="answer"></p>
+        <h3>Sources</h3>
+        <ul id="citations" class="citations"></ul>
+      </div>
+
+      <details id="trace-details" hidden>
+        <summary>Retrieval trace</summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Stage</th>
+                <th scope="col">Rank</th>
+                <th scope="col">Chunk</th>
+                <th scope="col">Score</th>
+                <th scope="col">Type</th>
+                <th scope="col">Channel</th>
+              </tr>
+            </thead>
+            <tbody id="trace-body"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

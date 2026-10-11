@@ -26,6 +26,19 @@ MODEL_PINS: dict[str, tuple[str, str]] = {
         "sentence-transformers/multi-qa-mpnet-base-dot-v1",
         "17997f24dca0df1a4fed68894fb0e1e133e60482",
     ),
+    # Bake-off candidates (Task 28). Revisions from huggingface_hub.model_info(id).sha.
+    "e5-large-instruct": (
+        "intfloat/multilingual-e5-large-instruct",
+        "274baa43b0e13e37fafa6428dbc7938e62e5c439",
+    ),
+    "qwen3-embedding-0.6b": (
+        "Qwen/Qwen3-Embedding-0.6B",
+        "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+    ),
+    "qwen3-reranker-0.6b": (
+        "Qwen/Qwen3-Reranker-0.6B",
+        "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+    ),
 }
 
 
@@ -53,7 +66,8 @@ _L2 = PipelineConfig(name="L2")
 _L3 = replace(_L2, name="L3", use_reranker=True)
 _L4 = replace(_L3, name="L4", use_context=True, neighbours=1)
 # D2: L5 keeps the neighbour passages of L4, so L5 against L4 isolates the graph.
-_L5 = replace(_L4, name="L5", use_graph=True)
+# Graph parameters chosen on the dev split only (experiments/results/tune-dev.md).
+_L5 = replace(_L4, name="L5", use_graph=True, graph_restart=0.5, seed_k=50, graph_k=20)
 
 PRESETS: dict[str, PipelineConfig] = {
     "L2": _L2,

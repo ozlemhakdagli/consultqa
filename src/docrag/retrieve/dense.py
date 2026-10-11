@@ -113,6 +113,21 @@ ENCODER_SPECS: dict[str, EncoderSpec] = {
     "e5-small": EncoderSpec(
         model_key="e5-small", query_prefix="query: ", passage_prefix="passage: "
     ),
+    # Instruction prefixes from each model card; passages take no prefix.
+    "e5-large-instruct": EncoderSpec(
+        model_key="e5-large-instruct",
+        query_prefix=(
+            "Instruct: Given a web search query, retrieve relevant passages that answer the query\n"
+            "Query: "
+        ),
+    ),
+    "qwen3-embedding-0.6b": EncoderSpec(
+        model_key="qwen3-embedding-0.6b",
+        query_prefix=(
+            "Instruct: Given a web search query, retrieve relevant passages that answer the query\n"
+            "Query:"
+        ),
+    ),
 }
 
 

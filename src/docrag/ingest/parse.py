@@ -4,7 +4,7 @@ Parsers raise ``ParseError`` with a stable code, and the ingestion job stores th
 """
 
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import fitz
 import pymupdf4llm
@@ -78,6 +78,44 @@ def _page_count(path: Path) -> int:
     if locked:
         raise ParseError("parse_failed")
     return pages
+
+
+class DoclingParser:
+    """PDF, DOCX, PPTX and HTML through Docling, on the CPU.
+
+    Docling is imported on first use, so the default install does not need it. The converter is
+    built once per parser and reused. Any failure, including a missing install, becomes
+    ``parse_failed``.
+    """
+
+    name = "docling"
+    suffixes = frozenset({".pdf", ".docx", ".pptx", ".html"})
+
+    def __init__(self) -> None:
+        self._converter: Any = None
+
+    def _get_converter(self) -> Any:
+        if self._converter is None:
+            from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+            from docling.datamodel.base_models import InputFormat
+            from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
+
+            pipeline = PdfPipelineOptions(
+                accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU)
+            )
+            self._converter = DocumentConverter(
+                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)}
+            )
+        return self._converter
+
+    def parse(self, path: Path) -> str:
+        _check_suffix(path, self.suffixes)
+        try:
+            result = self._get_converter().convert(str(path))
+            return result.document.export_to_markdown()
+        except Exception as exc:
+            raise ParseError("parse_failed") from exc
 
 
 def get_parser(name: str, *, max_pages: int) -> Parser:
