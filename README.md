@@ -6,22 +6,30 @@ A question is answered from the fused dense and BM25 lists (reciprocal rank fusi
 
 ## Status
 
-- On the held-out test split, hybrid RRF (L2) improves MRR@10 over the published method (L0): 0.551 against 0.284.
-- Adding the reranker (L3), the neighbour context (L4) or the evidence graph (L5) did not produce a measurable gain on this public sample. See [What did not work](#what-did-not-work).
+- On the test split, a regression set rather than a clean holdout (see [Results](#results)), hybrid RRF (L2) improves MRR@10 over the published method (L0): 0.551 against 0.284. The gain is for the whole bundle: the encoder (BGE-M3, where the paper uses an English sentence encoder), Turkish BM25 and RRF fusion. Their contributions are not isolated.
+- Adding the reranker (L3), the neighbour context (L4) or the evidence graph (L5) did not produce a measurable gain on this public sample. The graph result covers single-hop questions only, and multi-hop questions were not evaluated. See [What did not work](#what-did-not-work).
 - The LLM rungs (L4+llm, L5+llm) are not measured.
+- The API default is L2. It was changed after these results were recorded, and the later stages did not beat it on the test split. See [Default preset](#default-preset).
 - The default embedder (`bge-m3`) and reranker (`reranker-v2-m3`) are unchanged. The bake-off tables below await owner review.
 
 ## Quick start
 
-You need Docker with Compose, about 7 GB of disk space for the model cache, and network access for the first download.
+You need Docker with Compose and about 12 GB of free disk space: the image (about 2.4 GB) and the four models copied into the `models` volume (about 9 GB, a second copy of the host cache). The first start takes minutes: the image build installs CPU PyTorch, and the service loads the models before `/api/ready` answers 200.
+
+The models are the pinned revisions in `docrag.config.MODEL_PINS`. If they are already in your Hugging Face cache (`~/.cache/huggingface/hub`), copy the four pinned models that `fetch-models` also downloads into the `models` volume, then start the stack:
 
 ```bash
-# Once: download the pinned model revisions (about 7 GB) into the models volume
-docker compose --profile setup run --rm fetch-models
+# Once: build the image, then copy the four cached models into the models volume
+MODELS="models--BAAI--bge-m3 models--BAAI--bge-reranker-v2-m3 models--deepset--xlm-roberta-large-squad2 models--sentence-transformers--multi-qa-mpnet-base-dot-v1"
+docker compose build app
+docker run --rm -v docrag_models:/models -v "$HOME/.cache/huggingface/hub:/src:ro" \
+  --entrypoint sh docrag:dev -c "mkdir -p /models/hub && for m in $MODELS; do cp -r /src/\$m /models/hub/; done"
 
-# Start the app on http://127.0.0.1:8000 (Qdrant starts with it)
-docker compose up -d --wait app
+# Start the app on http://127.0.0.1:8000 (Qdrant starts with it); --wait returns when it is healthy
+DOCRAG_BACKEND=real docker compose up -d --wait app
 ```
+
+Without a cache, `docker compose --profile setup run --rm fetch-models` downloads the same revisions into the volume first (about 9 GB). If the copy is missing a model, fetch only that model with the same command.
 
 The web page at `http://127.0.0.1:8000/` has an upload form. The same steps through the API, all under `/api`:
 
@@ -30,7 +38,7 @@ The web page at `http://127.0.0.1:8000/` has an upload form. The same steps thro
 curl -s -X POST http://127.0.0.1:8000/api/collections \
   -H 'Content-Type: application/json' -d '{"name": "demo"}'
 
-# 2. Upload a .pdf, .txt or .md file; ingestion runs as a job
+# 2. Upload a .pdf, .txt or .md file; ingestion runs as a job (503 not_ready until the models load)
 curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/documents -F 'file=@manual.pdf'
 curl -s http://127.0.0.1:8000/api/jobs/<job_id>    # state becomes done, or failed with an error code
 
@@ -39,11 +47,11 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
   -H 'Content-Type: application/json' -d '{"question": "<your question>", "preset": "L2"}'
 ```
 
-`GET /api/presets` lists the presets. The API default is `L2`, the hybrid RRF preset that measured best on this sample. Pass `preset` to use another rung. Uploads are limited to 20 MB by default (`DOCRAG_MAX_UPLOAD_MB`).
+`GET /api/presets` lists the presets. The API default is `L2`, the hybrid RRF preset (see [Default preset](#default-preset)). Pass `preset` to use another rung. Uploads are limited to 20 MB by default (`DOCRAG_MAX_UPLOAD_MB`).
 
-To check the service without downloading models, `make smoke` starts the stub backend and checks `/api/health`.
+To check the service without downloading models, `make smoke` starts the stub backend and checks `/api/ready`.
 
-**Optional LLM reader.** Set `DOCRAG_LLM_BASE_URL` and `DOCRAG_LLM_MODEL` in `.env`. Until an endpoint is configured, the LLM presets return 503 `llm_unavailable`. The API key is read from `DOCRAG_LLM_API_KEY`, but `compose.yml` does not pass it to the container yet, so add it to the `app` service before using a hosted endpoint.
+**Optional LLM reader.** Set `DOCRAG_LLM_BASE_URL` (with or without the trailing `/v1`, for example `http://ollama:11434/v1`) and `DOCRAG_LLM_MODEL` in `.env`. For a hosted endpoint, also set `DOCRAG_LLM_API_KEY`; `compose.yml` passes it to the container. Until an endpoint is configured, the LLM presets return 503 `llm_unavailable`. No LLM is included in the stack, and the LLM presets are not measured.
 
 ## Results
 
@@ -59,13 +67,19 @@ All numbers are on the public synthetic sample in `data/sample/`. Each interval 
 | L5 | L4 plus evidence-graph expansion (`graph_restart` 0.5, `seed_k` 50, `graph_k` 20). L5 keeps L4's neighbouring passages, so comparing L5 with L4 isolates the graph |
 | L4+llm, L5+llm | L4 and L5 with the LLM reader. Not measured |
 
-### Test split (held out from tuning)
+L0 here is a re-run of the published method on this public sample. Its numbers are not comparable with the paper's own figures.
+
+The extractive reader gets only the top passage, so the heading and neighbour passages of L4 and L5 reach only the LLM reader. For the extractive rungs, L4 changes the heading prefix alone.
+
+### Test split (regression set)
+
+The test split is a regression set, not a clean holdout. It was used in exploration on the earlier branch, which has been deleted, and that exploration shaped the design. It was held out from graph tuning and from the bake-offs only.
 
 Run header (`ladder-T1-test.md`):
 
 - Corpus SHA-256 `f45275ade478f88526fcaaa285ba21f1a8a6d0a81fc85d7bc316ca4fcb1f010f`; evaluation SHA-256 `cf447d604493ce980cfcc3077e389343e5f68a227b76912797ca0ec038107c02`.
 - Git HEAD `5aa0bee`, with uncommitted changes: true.
-- Python 3.11.17; torch 2.14.1; transformers 4.57.6; sentence-transformers 5.7.0; CUDA available: true.
+- Python 3.11.17; torch 2.14.1; transformers 4.57.6; sentence-transformers 5.7.0; CUDA available: true. The header records CUDA availability but not the device name; the recorded runs used an NVIDIA GeForce RTX 3080 Ti.
 
 | system | n | clusters | MRR@10 [95% CI] | EM [95% CI] | F1 [95% CI] | Δ MRR@10 vs L0 [95% CI] | verdict |
 |---|---|---|---|---|---|---|---|
@@ -80,12 +94,16 @@ Primary intervals are paired against L0, per question, clustered by cluster_id. 
 
 Paired differences, recomputed from `experiments/results/ladder-T1-test.jsonl` with `docrag.eval.stats.cluster_bootstrap`:
 
-| Comparison | MRR@10 | EM |
+| Comparison | MRR@10 | EM¹ |
 |---|---|---|
 | L2 minus L0 | +0.268 [+0.227, +0.308] | +0.310 [+0.259, +0.361] |
 | L3 minus L2 | -0.007 [-0.037, +0.024] | -0.018 [-0.059, +0.026] |
 | L4 minus L3 | +0.000 [+0.000, +0.000] | -0.010 [-0.028, +0.007] |
-| L5 minus L4 | -0.000 [-0.001, +0.000] | +0.000 [+0.000, +0.000] |
+| L5 minus L4 | -0.0004 [-0.001, +0.000] | +0.000 [+0.000, +0.000] |
+
+¹ The EM column of `L2 minus L0` mixes two changes: the metric (L1 is L0 with the corrected metric, on the same predictions) and the system (L2). For the metric change alone, L2 minus L1 is EM +0.235 [+0.185, +0.285].
+
+F1 is a primary metric in the verdict. Its tokenizer splits version strings such as `V2.2.0` into several tokens, so a wrong version gets partial credit: `V2.3.0` for `V2.2.0` shares two of three tokens and scores F1 0.667. Answers that name versions should be read with that in mind.
 
 ### Dev split (used for tuning)
 
@@ -106,7 +124,7 @@ Run header (`ladder-T1-dev.md`):
 
 Primary intervals are paired against L0, per question, clustered by cluster_id. Verdict: worse if any primary interval lies entirely below zero; better if every primary interval lies entirely above zero; otherwise undecided. Slices with n <= 20 are anecdotal.
 
-The graph parameters were chosen on dev only (`experiments/results/tune-dev.md`). Across the 12 settings of `graph_restart`, `seed_k` and `graph_k`, L5's dev MRR@10 ranged from 0.5334 to 0.5353.
+The dev split was used for tuning. The graph parameters were chosen on dev only (`experiments/results/tune-dev.md`). Across the 12 settings of `graph_restart`, `seed_k` and `graph_k`, L5's dev MRR@10 ranged from 0.5334 to 0.5353.
 
 ### Bake-offs (dev split; decisions await owner review)
 
@@ -116,6 +134,8 @@ The graph parameters were chosen on dev only (`experiments/results/tune-dev.md`)
 |---|---|---|---|---|---|
 | pymupdf4llm | 3 | 0 | 1.000 | 1.000 | 0.28 |
 | docling | 3 | 0 | 1.000 | 1.000 | 3.87 |
+
+The docling mean of 3.87 s per file includes a 6.84 s first-call model load. Its steady state is 2.2 to 2.6 s per file, against 0.14 to 0.15 s per file for pymupdf4llm.
 
 **Embedder** (`bakeoff-embedder.md`). Dense retrieval only, top 20. The rule picks e5-large-instruct, but its paired gain over bge-m3 is +0.0135 [-0.0372, +0.0672], which includes zero. `PipelineConfig.encoder` stays `bge-m3` until the owner approves the table. Gemma was not run because its weights are gated.
 
@@ -137,21 +157,26 @@ The graph parameters were chosen on dev only (`experiments/results/tune-dev.md`)
 
 **LLM** (`bakeoff-llm.md`, `ladder-T1-llm.md`). Blocked. No candidate was run and no LLM call was made. The gates were not met: no reachable endpoint (Ollama is not installed and `DOCRAG_LLM_BASE_URL` is unset), no endpoint chosen by the owner, and no owner calibration labels. L4+llm and L5+llm have no numbers on either split.
 
+### Default preset
+
+The API default was L5 when the tables above were recorded. It was changed to L2 on 2026-10-11, after these results. The change is recorded in `experiments/protocol.json` (`made_after_results`), and no measured number changed. The reason is that the L5 graph did not improve on L4, and L2 is the simplest rung that the later stages did not beat on the test split: L2 scored MRR@10 0.551 against 0.544 for L5. L2 is not the measured best. On dev, L3 to L5 scored about 0.03 MRR@10 above L2; the L3 minus L2 interval includes zero, and that gain did not repeat on test.
+
 ## What did not work
 
 - **Reranker (L3).** On the test split, L3 minus L2 is -0.007 MRR@10 [-0.037, +0.024]. On dev the point estimate was +0.028 [-0.010, +0.064], which includes zero and did not repeat on test.
-- **Neighbour context (L4).** Neighbours change what the reader sees, not the ranking. MRR@10 is identical for all 400 test questions, and EM moved -0.010 [-0.028, +0.007].
-- **Evidence graph (L5).** Against L4, MRR@10 changes on 4 of 400 test questions, a net difference of -0.000 [-0.001, +0.000]. EM is unchanged.
-- **Exact match.** From L2 to L5, the EM point estimate fell from 0.427 to 0.400 on the test split. No stage-by-stage EM interval excludes zero.
-- **Default preset.** The API default is L5, the full pipeline. On the test split L2 measured at least as well (MRR@10 0.551 against 0.544).
+- **Neighbour context (L4).** The extractive reader gets only the top passage, so for it L4 measured the heading prefix alone. MRR@10 is identical for all 400 test questions, and EM moved -0.010 [-0.028, +0.007]. The neighbour effect is unmeasured for the extractive reader. Neighbours reach only the LLM reader (L4+llm), which is not measured.
+- **Evidence graph (L5).** Against L4, MRR@10 changes on 4 of 400 test questions, a net difference of -0.0004 [-0.001, +0.000]. EM is unchanged. This result covers single-hop questions only: 388 of the 400 test questions have one gold passage, and the sample has no multi-hop questions, so multi-hop retrieval was not evaluated.
+- **Exact match.** From L2 to L5, the EM point estimate fell from 0.427 to 0.400 on the test split, and every stage-by-stage EM interval on the test split includes zero. On dev the same comparison rose: EM went from 0.370 to 0.420, +0.050 [+0.000, +0.104]. The lower bound of that dev interval is zero to three decimals.
+- **Default preset.** See [Default preset](#default-preset) above.
 
 ## Limitations
 
-- The public sample is synthetic and template-based: 480 passages, 200 dev questions and 400 test questions. It measures this sample, not real user questions.
+- The public sample is synthetic and template-based: 480 passages, 200 dev questions and 400 test questions. It measures this sample, not real user questions. The test split is a regression set, not a clean holdout.
 - No real-text split has been built. Its data source is still open: XQuAD-tr is CC BY-SA 4.0, and TQuAD has no licence.
 - The parser comparison covers three clean PDFs. Scanned pages, complex layouts and end-to-end Turkish OCR were not tested.
 - The LLM reader has no measured results and no approved default.
-- The recorded runs used one machine (NVIDIA RTX 3080 Ti, CUDA). The run headers record the environment.
+- The graph result covers single-hop questions only. Multi-hop questions were not evaluated, and the sample has none.
+- The recorded runs used one machine, an NVIDIA GeForce RTX 3080 Ti with CUDA. The run headers record CUDA availability, not the device name.
 
 ## Privacy
 
@@ -162,8 +187,10 @@ Private material (the git-ignored `private/` folder and `data/raw/`) is never tr
 ```bash
 make test        # unit tests; no model weights needed
 make lint        # ruff check and ruff format --check
-make reproduce   # reruns both ladders on the public sample and rewrites experiments/results/
+make reproduce   # checks the protocol hashes, then reruns both ladders and rewrites experiments/results/
 ```
+
+The protocol ordering is evidenced by git only through file timestamps and the protocol hashes in `experiments/protocol.json`. `make reproduce` runs `verify-protocol` first, so a changed sample file stops the run before any number is written.
 
 `make reproduce` needs the pinned weights in the local Hugging Face cache. `scripts/fetch_models.py` fetches them, and the Makefile sets `HF_HUB_OFFLINE=1`. Tests that need real weights are marked `model` and run with `pytest -m model`.
 
