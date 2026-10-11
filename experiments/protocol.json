@@ -30,5 +30,12 @@
     "seed_k": [20, 50],
     "graph_k": [10, 20]
   },
-  "made_after_results": []
+  "made_after_results": [
+    {
+      "date": "2026-10-11",
+      "change": "Default preset moved from L5 to L2 for the API (ask and search).",
+      "reason": "The L5 graph did not improve on L4 (see the ladder tables), and L2 was the simplest rung that the later stages did not beat on the test split.",
+      "measured_numbers_changed": false
+    }
+  ]
 }

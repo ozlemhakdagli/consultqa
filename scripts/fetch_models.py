@@ -1,7 +1,7 @@
 """Download the pinned model revisions into the Hugging Face cache (HF_HOME, the models volume).
 
 Run once before the real backend starts:
-``docker compose --profile setup run --rm fetch-models``. The download is about 7 GB.
+``docker compose --profile setup run --rm fetch-models``. The download is about 9 GB.
 Every revision comes from ``docrag.config.MODEL_PINS``, so nothing is fetched at a moving revision.
 """
 

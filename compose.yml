@@ -1,5 +1,6 @@
 # Compose stack for docrag. Every image tag is pinned to an exact version.
-# First run: docker compose --profile setup run --rm fetch-models (about 7 GB), then docker compose up -d --wait app
+# First run: copy the pinned models into the models volume (README, Quick start), then
+# DOCRAG_BACKEND=real docker compose up -d --wait app. Without a model cache, fetch-models downloads them.
 name: docrag
 
 x-app-build: &app-build
@@ -19,18 +20,21 @@ services:
       # DOCRAG_LLM_BASE_URL=http://ollama:11434/v1 and DOCRAG_LLM_MODEL=<a model pulled into ollama>.
       DOCRAG_LLM_BASE_URL: ${DOCRAG_LLM_BASE_URL:-}
       DOCRAG_LLM_MODEL: ${DOCRAG_LLM_MODEL:-}
+      DOCRAG_LLM_API_KEY: ${DOCRAG_LLM_API_KEY:-}
     volumes:
       - models:/models
       - state:/app/state
     depends_on:
       qdrant:
         condition: service_healthy
+    # Healthy only when the models are loaded (/api/ready answers 200), not merely when the
+    # process is up. The first start loads several gigabytes, so the window is generous.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=5)"]
       interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 30s
+      retries: 30
+      start_period: 60s
     restart: unless-stopped
 
   fetch-models:

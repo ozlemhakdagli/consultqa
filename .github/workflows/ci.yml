@@ -4,9 +4,18 @@ on:
   push:
   pull_request:
 
+# The workflow only reads the repository.
+permissions:
+  contents: read
+
 jobs:
   lint-test:
     runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.19.1
+        ports:
+          - 6333:6333
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,9 +28,12 @@ jobs:
           pip install -e ".[ml,pdf,api,dev]"
       - run: ruff check .
       - run: ruff format --check .
+      - name: Wait for Qdrant
+        run: curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://localhost:6333/collections
       - name: Tests
         env:
           HF_HUB_OFFLINE: "1"
+          DOCRAG_QDRANT_URL: http://localhost:6333
         run: pytest -q
 
   compose-smoke:
@@ -32,8 +44,33 @@ jobs:
         env:
           DOCRAG_BACKEND: stub
         run: docker compose up -d --wait app
-      - name: Health check
-        run: curl -fsS http://localhost:8000/api/health
+      - name: Readiness check
+        run: curl -fsS http://localhost:8000/api/ready
+      - name: Upload a small document and wait for indexing
+        run: |
+          set -euo pipefail
+          base=http://localhost:8000/api
+          cid=$(curl -fsS -X POST "$base/collections" -H 'Content-Type: application/json' \
+            -d '{"name": "ci"}' | jq -r '.id')
+          printf '# Stok\n\nStok modülü performans iyileştirmesi yapıldı.\n' > sample.md
+          job=$(curl -fsS -X POST "$base/collections/$cid/documents" -F 'file=@sample.md;type=text/markdown' \
+            | jq -r '.job_id')
+          for _ in $(seq 1 60); do
+            state=$(curl -fsS "$base/jobs/$job" | jq -r '.state')
+            [ "$state" = "done" ] && break
+            [ "$state" = "failed" ] && { echo "ingestion failed"; exit 1; }
+            sleep 1
+          done
+          [ "$state" = "done" ]
+          echo "$cid" > collection.id
+      - name: Ask a question and check the citation
+        run: |
+          set -euo pipefail
+          cid=$(cat collection.id)
+          body=$(curl -fsS -X POST "http://localhost:8000/api/collections/$cid/ask" \
+            -H 'Content-Type: application/json' -d '{"question": "Stok", "preset": "L2"}')
+          echo "$body" | jq -e '.answer != null and (.citations | length) >= 1' > /dev/null
+          echo "$body" | jq -r '.citations[0].number'
       - name: Service logs on failure
         if: failure()
         run: docker compose logs
