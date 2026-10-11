@@ -204,16 +204,12 @@ The API default was L5 when the tables above were recorded. It was changed to L2
 - The recorded runs used one machine, an NVIDIA GeForce RTX 3080 Ti with CUDA. The run headers record CUDA availability, not the device name.
 - English is not measured. The evaluation sample is Turkish only. English questions are expected to work, because the encoder (BGE-M3), the reranker and the reader (XLM-RoBERTa) are multilingual, but no English quality figure exists. The 5-character BM25 prefix was chosen for Turkish, and the evidence graph (L5) still uses the Turkish casefolding.
 
-## Privacy
-
-Private material (the git-ignored `private/` folder and `data/raw/`) is never tracked, never copied into the Docker image (`.dockerignore` is an allowlist), and never published. Any figure from private material is an aggregate, labelled anecdotal when n is 20 or fewer. This README names no company, product, filename or question from private material. `tests/test_repo_privacy.py` checks that no private path or PDF is tracked.
-
 ## Reproduce
 
 ```bash
 make test        # unit tests; no model weights needed
 make lint        # ruff check and ruff format --check
-make privacy     # checks that no private path or PDF is tracked
+make privacy     # checks the tracked files against the publication rules
 make reproduce   # verifies the protocol hashes, then re-runs the dev and test ladders
 ```
 
