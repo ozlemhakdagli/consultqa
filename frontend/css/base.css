@@ -1,0 +1,125 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+h1 {
+  font-size: 1.6rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 12px 0 8px;
+}
+
+h4 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+input,
+select,
+textarea,
+button {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+input[type="radio"] {
+  width: 24px;
+  min-height: 24px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+:disabled {
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+.button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button:disabled {
+  color: var(--accent-text);
+  opacity: 0.6;
+}
+
+.button-secondary {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.button-danger {
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

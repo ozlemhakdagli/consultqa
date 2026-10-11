@@ -1,5 +1,6 @@
 # tests/test_config.py
 import re
+from pathlib import Path
 
 from docrag.config import MODEL_PINS, PRESETS, load_settings
 
@@ -24,3 +25,9 @@ def test_settings_defaults_are_safe():
     assert settings.enable_paper_baseline is False
     assert settings.max_upload_mb == 20
     assert settings.qdrant_url is None
+
+
+def test_frontend_dir_is_read_from_the_environment():
+    assert load_settings({}).frontend_dir is None
+    settings = load_settings({"DOCRAG_FRONTEND_DIR": "/app/frontend"})
+    assert settings.frontend_dir == Path("/app/frontend")

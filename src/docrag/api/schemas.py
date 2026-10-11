@@ -70,3 +70,23 @@ class SearchResponse(BaseModel):
     hits: list[TraceItem]
     preset: str
     latency_ms: float
+
+
+class PresetInfo(BaseModel):
+    """One method as the page sees it: whether it can be used now and, if not, why."""
+
+    name: str
+    available: bool
+    reason: str | None
+    uses_llm: bool
+
+
+class Capabilities(BaseModel):
+    """What the page may offer: readiness, upload limits and the methods that can be used."""
+
+    ready: bool
+    llm_configured: bool
+    max_upload_mb: float
+    extensions: list[str]
+    default_preset: str
+    presets: list[PresetInfo]

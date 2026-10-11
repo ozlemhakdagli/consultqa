@@ -1,5 +1,6 @@
 """FastAPI application factory for the docrag API."""
 
+import logging
 import re
 import threading
 from collections.abc import AsyncIterator
@@ -12,14 +13,37 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from docrag.api.routes import build_router, upload_limit_bytes
 from docrag.api.services import Services, build_services, load_in_background
 from docrag.config import load_settings
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+logger = logging.getLogger(__name__)
+
+# The page lives in the repository root; the image sets DOCRAG_FRONTEND_DIR instead.
+DEFAULT_FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
+PAGE_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    # Static files carry old modification times, so a browser could otherwise keep a stale page.
+    "Cache-Control": "no-cache",
+}
 _UPLOAD_PATH = re.compile(r"^/api/collections/[^/]+/documents$")
+
+
+class FrontendFiles(StaticFiles):
+    """The page's static files, sent with security and revalidation headers (API routes are not)."""
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers.update(PAGE_HEADERS)
+        return response
 
 
 def _error(status_code: int, code: str) -> JSONResponse:
@@ -78,7 +102,14 @@ def create_app(services: Services | None = None) -> FastAPI:
     app.state.inference_semaphore = semaphore
     app.include_router(build_router(services, semaphore))
     # Mounted after the API router, so /api routes take precedence over the page.
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+    frontend_dir = services.settings.frontend_dir or DEFAULT_FRONTEND_DIR
+    if frontend_dir.is_dir():
+        app.mount("/", FrontendFiles(directory=frontend_dir, html=True), name="frontend")
+    else:
+        logger.warning(
+            "frontend folder %s not found; serving the API only (set DOCRAG_FRONTEND_DIR)",
+            frontend_dir,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(_: Request, __: RequestValidationError) -> JSONResponse:

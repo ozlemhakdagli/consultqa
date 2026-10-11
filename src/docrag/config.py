@@ -94,6 +94,7 @@ class Settings:
     max_upload_mb: float = 20
     max_pages: int = 200
     chunk_max_tokens: int = 200
+    frontend_dir: Path | None = None
 
 
 def _value(source: Mapping[str, str], name: str) -> str | None:
@@ -106,6 +107,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     source: Mapping[str, str] = os.environ if env is None else env
     base = Settings()
     state_dir = _value(source, "DOCRAG_STATE_DIR")
+    frontend_dir = _value(source, "DOCRAG_FRONTEND_DIR")
     return Settings(
         backend=_value(source, "DOCRAG_BACKEND") or base.backend,
         state_dir=Path(state_dir) if state_dir else base.state_dir,
@@ -118,4 +120,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         max_upload_mb=float(_value(source, "DOCRAG_MAX_UPLOAD_MB") or base.max_upload_mb),
         max_pages=int(_value(source, "DOCRAG_MAX_PAGES") or base.max_pages),
         chunk_max_tokens=int(_value(source, "DOCRAG_CHUNK_MAX_TOKENS") or base.chunk_max_tokens),
+        frontend_dir=Path(frontend_dir) if frontend_dir else None,
     )

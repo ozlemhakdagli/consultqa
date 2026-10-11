@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Belge Soru-Cevap</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <noscript>
+    <p class="banner banner-warn">Bu sayfanın çalışması için JavaScript gerekir. Lütfen tarayıcınızda JavaScript'i açın.</p>
+  </noscript>
+  <div class="page">
+    <header class="app-header">
+      <div>
+        <h1 data-text="app.title"></h1>
+        <p class="lede" data-text="app.lede"></p>
+      </div>
+      <p id="system-chip" class="chip" role="status" hidden></p>
+    </header>
+    <p id="system-banner" class="banner banner-warn" hidden></p>
+
+    <main class="layout">
+      <div class="column">
+        <section id="step-collection" class="card" aria-labelledby="step-collection-title">
+          <h2 id="step-collection-title"><span class="step-number">1</span> <span data-text="collection.title"></span></h2>
+          <p class="help" data-text="collection.help"></p>
+          <label for="collection-select" data-text="collection.selectLabel"></label>
+          <select id="collection-select"></select>
+          <form id="collection-form" class="form" novalidate>
+            <label for="collection-name" data-text="collection.newLabel"></label>
+            <input id="collection-name" type="text" maxlength="80" autocomplete="off" aria-describedby="collection-name-help">
+            <p id="collection-name-help" class="help" data-text="collection.newHelp"></p>
+            <button id="collection-create" type="submit" class="button" data-text="collection.create"></button>
+          </form>
+          <p id="collection-message" class="message" aria-live="polite" hidden></p>
+        </section>
+
+        <section id="step-documents" class="card" aria-labelledby="step-documents-title">
+          <h2 id="step-documents-title"><span class="step-number">2</span> <span data-text="documents.title"></span></h2>
+          <p class="help" data-text="documents.help"></p>
+          <form id="upload-form" class="form" novalidate>
+            <label for="upload-files" data-text="documents.fileLabel"></label>
+            <input id="upload-files" type="file" multiple aria-describedby="upload-hint upload-reason">
+            <p id="upload-hint" class="help"></p>
+            <p id="upload-reason" class="reason" hidden></p>
+            <button id="upload-submit" type="submit" class="button" data-text="documents.upload"></button>
+          </form>
+          <ul id="upload-list" class="upload-list" aria-live="polite"></ul>
+          <h3 id="documents-title" hidden></h3>
+          <p id="documents-empty" class="help" hidden></p>
+          <ul id="document-list" class="doc-list"></ul>
+          <p id="documents-message" class="message" aria-live="polite" hidden></p>
+        </section>
+      </div>
+
+      <div class="column">
+        <section id="step-ask" class="card" aria-labelledby="step-ask-title">
+          <h2 id="step-ask-title"><span class="step-number">3</span> <span data-text="ask.title"></span></h2>
+          <p class="help" data-text="ask.help"></p>
+          <form id="ask-form" class="form" novalidate>
+            <label for="question" data-text="ask.questionLabel"></label>
+            <textarea id="question" rows="3" maxlength="500" data-placeholder="ask.questionPlaceholder" aria-describedby="question-help ask-message"></textarea>
+            <p id="question-help" class="help" data-text="ask.questionHelp"></p>
+            <p id="ask-message" class="message message-error" role="alert" hidden></p>
+            <fieldset id="method-fieldset" class="methods">
+              <legend data-text="ask.methodLegend"></legend>
+              <p class="help" data-text="ask.methodHelp"></p>
+              <div id="method-list"></div>
+            </fieldset>
+            <p id="ask-reason" class="reason" hidden></p>
+            <button id="ask-submit" type="submit" class="button" data-text="ask.submit"></button>
+          </form>
+          <div id="result" class="result"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -19,8 +19,10 @@ from fastapi.responses import JSONResponse
 from docrag.api.schemas import (
     AskRequest,
     AskResponse,
+    Capabilities,
     Citation,
     CreateCollection,
+    PresetInfo,
     SearchRequest,
     SearchResponse,
     TraceItem,
@@ -41,6 +43,7 @@ from docrag.store.sqlite_store import CollectionExists
 logger = logging.getLogger(__name__)
 
 _READ_BYTES = 1024 * 1024
+LLM_NOT_CONFIGURED = "llm_not_configured"
 ResultT = TypeVar("ResultT")
 
 
@@ -63,6 +66,10 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
         if services.store.get_collection(cid) is None:
             raise HTTPException(status_code=404, detail="collection_not_found")
 
+    def llm_missing(cfg: PipelineConfig) -> bool:
+        """True for a preset that needs an LLM when none is configured."""
+        return cfg.reader == "llm" and services.llm is None
+
     def resolve_preset(name: str) -> PipelineConfig | None:
         """Return the pipeline of a preset, or None for the published method.
 
@@ -76,7 +83,7 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
         cfg = PRESETS.get(name)
         if cfg is None:
             raise HTTPException(status_code=422, detail="unknown_preset")
-        if cfg.reader == "llm" and services.llm is None:
+        if llm_missing(cfg):
             raise HTTPException(status_code=503, detail="llm_unavailable")
         return cfg
 
@@ -97,6 +104,31 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
         """List the preset names, with ``paper`` when the published method is enabled."""
         names = list(PRESETS)
         return [*names, PAPER_PRESET] if services.paper_enabled else names
+
+    @router.get("/capabilities", response_model=Capabilities)
+    def capabilities() -> Capabilities:
+        """What the page may offer: readiness, upload limits and which methods can be used."""
+        presets = [
+            PresetInfo(
+                name=name,
+                available=not llm_missing(cfg),
+                reason=LLM_NOT_CONFIGURED if llm_missing(cfg) else None,
+                uses_llm=cfg.reader == "llm",
+            )
+            for name, cfg in PRESETS.items()
+        ]
+        if services.paper_enabled:
+            presets.append(
+                PresetInfo(name=PAPER_PRESET, available=True, reason=None, uses_llm=False)
+            )
+        return Capabilities(
+            ready=services.ready.is_set(),
+            llm_configured=services.llm is not None,
+            max_upload_mb=services.settings.max_upload_mb,
+            extensions=sorted(services.parser.suffixes),
+            default_preset=DEFAULT_PRESET,
+            presets=presets,
+        )
 
     @router.post("/collections", status_code=201)
     def create_collection(body: CreateCollection) -> dict[str, str]:

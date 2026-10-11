@@ -30,10 +30,17 @@ def test_dockerignore_is_an_allowlist():
     assert rules[0] == "*"
 
 
-def test_static_web_page_ships_with_the_package():
-    """The API serves docrag/api/static, so a non-editable install must include it."""
+def test_page_is_copied_into_the_image_and_found_through_the_environment():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY frontend /app/frontend" in dockerfile
+    assert "DOCRAG_FRONTEND_DIR=/app/frontend" in dockerfile
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert pyproject["tool"]["setuptools"]["package-data"]["docrag.api"] == ["static/*"]
+    assert "docrag.api" not in pyproject["tool"]["setuptools"]["package-data"]
+
+
+def test_dockerignore_allows_the_frontend_folder():
+    lines = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert "!frontend/" in [line.strip() for line in lines]
 
 
 def test_app_healthcheck_waits_for_the_models():
@@ -65,3 +72,11 @@ def test_compose_smoke_asks_a_question_not_only_health():
     ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
     script = "\n".join(step.get("run", "") for step in ci["jobs"]["compose-smoke"]["steps"])
     assert "/documents" in script and "/jobs/" in script and "/ask" in script
+
+
+def test_compose_smoke_checks_the_page_and_the_capabilities():
+    import yaml
+
+    ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    script = "\n".join(step.get("run", "") for step in ci["jobs"]["compose-smoke"]["steps"])
+    assert "/js/main.js" in script and "/api/capabilities" in script
