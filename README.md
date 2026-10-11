@@ -39,7 +39,7 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
   -H 'Content-Type: application/json' -d '{"question": "<your question>", "preset": "L2"}'
 ```
 
-`GET /api/presets` lists the presets. The API default is `L5`, the full pipeline. On this sample L2 measured at least as well, so pass `preset` explicitly. Uploads are limited to 20 MB by default (`DOCRAG_MAX_UPLOAD_MB`).
+`GET /api/presets` lists the presets. The API default is `L2`, the hybrid RRF preset that measured best on this sample. Pass `preset` to use another rung. Uploads are limited to 20 MB by default (`DOCRAG_MAX_UPLOAD_MB`).
 
 To check the service without downloading models, `make smoke` starts the stub backend and checks `/api/health`.
 
