@@ -1,7 +1,7 @@
 PY ?= python
 export HF_HUB_OFFLINE=1
 
-.PHONY: test lint format privacy up smoke reproduce
+.PHONY: test e2e lint format privacy up smoke reproduce
 
 reproduce:
 	$(PY) -m docrag.eval.cli verify-protocol --protocol experiments/protocol.json --file corpus=data/sample/corpus.jsonl --file eval_dev=data/sample/eval_dev.jsonl --file eval_test=data/sample/eval_test.jsonl
@@ -10,6 +10,9 @@ reproduce:
 
 test:
 	$(PY) -m pytest -q
+
+e2e:
+	$(PY) -m pytest -q -m e2e
 
 lint:
 	$(PY) -m ruff check .

@@ -27,13 +27,15 @@ RUN groupadd --gid 10001 docrag \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY scripts/fetch_models.py /app/scripts/fetch_models.py
+COPY frontend /app/frontend
 
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/models \
     HF_HUB_OFFLINE=1 \
-    DOCRAG_STATE_DIR=/app/state
+    DOCRAG_STATE_DIR=/app/state \
+    DOCRAG_FRONTEND_DIR=/app/frontend
 
 WORKDIR /app
 USER 10001:10001

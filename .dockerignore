@@ -1,6 +1,7 @@
 # Allowlist: nothing is sent to the build context unless listed below.
 *
 !src/
+!frontend/
 !pyproject.toml
 !requirements*.txt
 !data/sample/

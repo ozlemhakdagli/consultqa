@@ -27,10 +27,10 @@ api = [
     "qdrant-client==1.19.1",
 ]
 dev = ["pytest==9.1.1", "ruff==0.16.10"]
+e2e = ["playwright==1.63.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"docrag.api" = ["static/*"]
 "docrag.eval" = ["judge_prompt.txt"]

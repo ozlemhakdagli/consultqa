@@ -46,6 +46,12 @@ jobs:
         run: docker compose up -d --wait app
       - name: Readiness check
         run: curl -fsS http://localhost:8000/api/ready
+      - name: Page and capabilities check
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:8000/ | grep -q 'Belge Soru-Cevap'
+          curl -fsS -o /dev/null http://localhost:8000/js/main.js
+          curl -fsS http://localhost:8000/api/capabilities | jq -e '.ready == true and (.presets | length) >= 4' > /dev/null
       - name: Upload a small document and wait for indexing
         run: |
           set -euo pipefail
