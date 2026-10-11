@@ -1,10 +1,6 @@
 # consultqa
 
-English | [Türkçe](README.tr.md)
-
 consultqa answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish or English, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
-
-**Özet (Türkçe).** consultqa, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır. Tam Türkçe kılavuz: [README.tr.md](README.tr.md).
 
 ## Status
 
