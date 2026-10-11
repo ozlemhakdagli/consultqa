@@ -8,7 +8,7 @@ Two places, both under the models volume (``/models`` in the image):
   folder through its ``artifacts_path``, so the app never needs the network for them.
 
 Run once before the real backend starts:
-``docker compose --profile setup run --rm fetch-models``. The download is about 9 GB plus 0.5 GB.
+``docker compose --profile setup run --rm fetch-models``. The download is about 7.3 GB plus 0.5 GB.
 Every revision here is a full commit hash, so nothing is fetched at a moving revision.
 """
 
@@ -20,6 +20,11 @@ from huggingface_hub import snapshot_download
 from consultqa.config import MODEL_PINS, load_settings
 
 FETCH_KEYS = ("bge-m3", "reranker-v2-m3", "xlm-roberta-squad2", "paper-embedder")
+
+# Files that the app never loads: the ONNX export (bge-m3 onnx/model.onnx_data alone is 2.2 GB),
+# the model-card images and the stray jpg and webp files. fnmatch matches "*" across "/", so
+# "*.jpg" also covers a jpg at the root of a repository. The weights, configs and tokenizers stay.
+IGNORE_PATTERNS = ["onnx/*", "imgs/*", "*.jpg", "*.webp"]
 
 # The commits that Docling requests: the layout model asks for "main" (8f39ad3c...) and the
 # table models for the tag "v2.3.0" (fc0f2d45...). Pinning the commit keeps the cache valid
@@ -43,7 +48,7 @@ def main() -> None:
     for key in FETCH_KEYS:
         repo_id, revision = MODEL_PINS[key]
         print(f"fetching {key}: {repo_id} @ {revision}", flush=True)
-        snapshot_download(repo_id=repo_id, revision=revision)
+        snapshot_download(repo_id=repo_id, revision=revision, ignore_patterns=IGNORE_PATTERNS)
 
     folder = load_settings().docling_artifacts
     if folder is None:

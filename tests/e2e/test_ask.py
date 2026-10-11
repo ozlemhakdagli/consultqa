@@ -27,6 +27,7 @@ def _mock_ask(page, status=200, **body):
     page.route("**/api/collections/*/ask", lambda route: route.fulfill(status=status, json=body))
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_ask_is_locked_and_says_why(page, base_url):
     mock_collections_unavailable(page)
     open_page(page, base_url, library=False)
@@ -110,6 +111,7 @@ def test_the_chosen_mode_is_not_remembered_after_a_reload(page, base_url):
     expect(page.get_by_role("radio", name="Hızlı ve doğru", exact=True)).to_be_checked()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_example_questions_fill_the_box_without_asking(page, base_url):
     collection_with_document(page, base_url)
     requests = []
@@ -133,6 +135,7 @@ def test_example_questions_fill_the_box_without_asking(page, base_url):
     assert requests == []
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_asking_is_explained_while_the_first_document_is_prepared(page, base_url):
     new_library(page, base_url)
     open_page(page, base_url)
@@ -154,6 +157,7 @@ def test_asking_is_explained_while_the_first_document_is_prepared(page, base_url
     expect(page.get_by_label("Sorunuz", exact=True)).to_have_value("Stok modülü")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_a_blank_question_is_explained_and_the_message_goes_away_when_typing(page, base_url):
     collection_with_document(page, base_url)
     page.get_by_role("button", name=ASK).click()
@@ -162,6 +166,7 @@ def test_a_blank_question_is_explained_and_the_message_goes_away_when_typing(pag
     expect(page.locator("#ask-message")).to_be_hidden()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_answer_shows_its_text_then_the_source_in_full(page, base_url):
     collection_with_document(page, base_url)
     expect(page.locator("#result-empty")).to_have_text("Cevabınız burada görünecek.")
@@ -184,6 +189,7 @@ def test_the_answer_shows_its_text_then_the_source_in_full(page, base_url):
     expect(page.locator("details.trace")).to_have_count(0)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_ai_answer_names_its_mode_and_markers_open_their_sources(page, base_url):
     collection_with_document(page, base_url)
     _ask(page, method="Yapay zekâ ile yazılmış cevap")
@@ -198,6 +204,7 @@ def test_ai_answer_names_its_mode_and_markers_open_their_sources(page, base_url)
 
 
 # Review Focus 2: a marker without a source and an index such as arr[3] stay plain text.
+@pytest.mark.usefixtures("fast_job_polling")
 def test_unknown_markers_stay_plain_text(page, base_url):
     collection_with_document(page, base_url)
     _mock_ask(
@@ -235,6 +242,7 @@ def test_unknown_markers_stay_plain_text(page, base_url):
     expect(page.get_by_role("heading", name="Kaynak 2")).to_be_visible()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_answer_not_found_is_a_calm_state_with_one_hint(page, base_url):
     collection_with_document(page, base_url)
     _mock_ask(page, answer=None, citations=[], trace=[], preset="L2", latency_ms=12.0)
@@ -258,6 +266,7 @@ def test_answer_not_found_is_a_calm_state_with_one_hint(page, base_url):
         (500, {"detail": "internal_error"}, None),
     ],
 )  # fmt: skip
+@pytest.mark.usefixtures("fast_job_polling")
 def test_errors_are_explained_in_turkish(page, base_url, status, body, text):
     collection_with_document(page, base_url)
     _mock_ask(page, status=status, **body)
@@ -271,6 +280,7 @@ def test_errors_are_explained_in_turkish(page, base_url, status, body, text):
     expect(page.get_by_role("button", name=ASK)).to_be_enabled()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_unreachable_server_during_a_question_is_explained(page, base_url):
     collection_with_document(page, base_url)
     page.route("**/api/collections/*/ask", lambda route: route.abort())
@@ -278,6 +288,7 @@ def test_unreachable_server_during_a_question_is_explained(page, base_url):
     expect(page.locator(".error-card")).to_contain_text("Uygulamaya bağlanılamadı.")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_ai_failure_is_explained_and_shows_no_search_details(page, base_url):
     collection_with_document(page, base_url)
     trace = [{"stage": "pool", "chunk_id": "c1", "rank": 1, "score": 0.5, "score_type": "rrf"}]
@@ -289,6 +300,7 @@ def test_ai_failure_is_explained_and_shows_no_search_details(page, base_url):
     expect(page.locator("details.trace")).to_have_count(0)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_blank_question_is_explained(page, base_url):
     collection_with_document(page, base_url)
     page.get_by_role("button", name=ASK).click()
@@ -296,6 +308,7 @@ def test_blank_question_is_explained(page, base_url):
 
 
 # Review Focus 4
+@pytest.mark.usefixtures("fast_job_polling")
 def test_double_click_sends_one_request(page, base_url):
     collection_with_document(page, base_url)
     requests = []
@@ -307,6 +320,7 @@ def test_double_click_sends_one_request(page, base_url):
 
 
 # Review Focus 1
+@pytest.mark.usefixtures("fast_job_polling")
 def test_passage_text_is_shown_as_text_never_as_html(page, base_url):
     collection_with_document(
         page, base_url, content="# Not\n\nBu paragraf <script>window.__pwned = 1</script> içerir.\n"

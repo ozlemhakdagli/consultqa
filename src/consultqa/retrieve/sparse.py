@@ -6,6 +6,7 @@ letters is lowercased with the default rule instead, so English capital letters 
 
 from collections.abc import Sequence
 
+import numpy as np
 from rank_bm25 import BM25Okapi
 
 from consultqa.config import BM25_PREFIX_LEN
@@ -49,6 +50,12 @@ class SparseChannel:
         # BM25Okapi divides by the vocabulary size, so it cannot be built when no chunk has a token.
         use_bm25 = len(self._chunks) >= BM25_MIN_CHUNKS and any(self._corpus)
         self._index = BM25Okapi(self._corpus) if use_bm25 else None
+        # BM25Okapi.get_scores rebuilds these two arrays on every question. They depend only on the
+        # library, so they are built once here, or on first use for the term frequencies.
+        self._doc_lengths: np.ndarray | None = (
+            np.array(self._index.doc_len) if self._index is not None else None
+        )
+        self._term_frequencies: dict[str, np.ndarray] = {}
 
     def search(self, query: str, k: int) -> list[Hit]:
         """Return up to ``k`` chunks with a positive score, best first."""
@@ -59,7 +66,7 @@ class SparseChannel:
             return []
         if self._index is None:
             return self._search_shared_tokens(terms, k)
-        scores = self._index.get_scores(terms)
+        scores = self._bm25_scores(terms)
         ranked = sorted(
             (i for i in range(len(self._chunks)) if scores[i] > 0),
             key=lambda i: -scores[i],
@@ -73,6 +80,27 @@ class SparseChannel:
             )
             for i in ranked[:k]
         ]
+
+    def _bm25_scores(self, terms: list[str]) -> np.ndarray:
+        """The BM25 score of every chunk, with the arithmetic of ``BM25Okapi.get_scores``.
+
+        A term that no chunk holds adds exactly zero, so it is skipped and never cached: the cache
+        then holds at most one array per term of the library, not one per term ever asked.
+        """
+        index = self._index
+        scores = np.zeros(len(self._chunks))
+        length_norm = index.k1 * (1 - index.b + index.b * self._doc_lengths / index.avgdl)
+        for term in terms:
+            if term not in index.idf:
+                continue
+            term_frequencies = self._term_frequencies.get(term)
+            if term_frequencies is None:
+                term_frequencies = np.array([(doc.get(term) or 0) for doc in index.doc_freqs])
+                self._term_frequencies[term] = term_frequencies
+            scores += (index.idf.get(term) or 0) * (
+                term_frequencies * (index.k1 + 1) / (term_frequencies + length_norm)
+            )
+        return scores
 
     def _query_terms(self, query: str) -> list[str]:
         """The query tokens under the Turkish rule, then the default-rule spelling of each token

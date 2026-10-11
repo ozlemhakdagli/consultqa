@@ -53,12 +53,13 @@ The models are the revisions pinned in `src/consultqa/config.py` (`MODEL_PINS`),
 # 1. Build the image
 docker compose build app
 
-# 2. Copy the four cached models into the models volume (skip if you use step 2b)
-MODELS="models--BAAI--bge-m3 models--BAAI--bge-reranker-v2-m3 models--deepset--xlm-roberta-large-squad2 models--sentence-transformers--multi-qa-mpnet-base-dot-v1"
-docker compose --profile setup run --rm --no-deps -v "$HOME/.cache/huggingface/hub:/src:ro" \
-  --entrypoint sh fetch-models -c "mkdir -p /models/hub && for m in $MODELS; do cp -r /src/\$m /models/hub/; done"
+# 2. Copy the pinned snapshot of each of the four cached models into the models volume (skip if you use step 2b)
+#    cp -L copies the files the snapshot links to; onnx/, imgs/ and the jpg and webp files are skipped.
+MODELS="models--BAAI--bge-m3/5617a9f61b028005a4858fdac845db406aefb181 models--BAAI--bge-reranker-v2-m3/953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e models--deepset--xlm-roberta-large-squad2/dafe59921a75cdffc06ed3ad6e45c581b22b85cc models--sentence-transformers--multi-qa-mpnet-base-dot-v1/17997f24dca0df1a4fed68894fb0e1e133e60482"
+docker compose --profile setup run --rm --no-deps -e MODELS="$MODELS" -v "$HOME/.cache/huggingface/hub:/src:ro" \
+  --entrypoint sh fetch-models -c 'for m in $MODELS; do repo=${m%/*}; rev=${m##*/}; src=/src/$repo/snapshots/$rev; dst=/models/hub/$repo/snapshots/$rev; mkdir -p "$dst"; for f in $(ls -A "$src"); do case $f in onnx|imgs|*.jpg|*.webp) continue;; esac; cp -rL "$src/$f" "$dst/"; done; done'
 
-# 2b. Without a cache, download the same revisions into the volume (about 9.5 GB)
+# 2b. Without a cache, download the same revisions into the volume (about 7.3 GB)
 #     docker compose --profile setup run --rm fetch-models
 
 # 3. Start the app and Qdrant; --wait returns when the app is healthy
@@ -67,7 +68,7 @@ CONSULTQA_BACKEND=real docker compose up -d --wait app
 
 Step 2 does not copy the Docling models. The cache keeps them in another folder layout, and the app reads them from `/models/docling` in the volume (`CONSULTQA_DOCLING_ARTIFACTS`), together with the RapidOCR models. Run `docker compose --profile setup run --rm fetch-models` after step 2 as well. It checks the four copied models and downloads the Docling models (about 0.5 GB). Without them, PDF uploads fail with `parse_failed`.
 
-The paper baseline's embedder may be a symlink in the Hugging Face cache, which `cp -r` copies as a dangling link; if the copy reports a missing file for it, fetch the models with `fetch-models` (step 2b) instead.
+The paper baseline's embedder may be a symlink in the Hugging Face cache, which `cp -L` follows; if the copy reports a missing file for it, fetch the models with `fetch-models` (step 2b) instead.
 
 Then open **http://127.0.0.1:8000/**. To check the service without downloading models, run `make smoke`. It starts the app with the stub backend and checks `/api/ready`; it replaces a running real-backend app container, so start the real backend again with step 3 afterwards.
 

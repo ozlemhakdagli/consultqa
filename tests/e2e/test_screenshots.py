@@ -77,7 +77,7 @@ def _capabilities_are(page: Page, caps: dict) -> None:
 def test_screenshots_of_every_state(device, make_page, base_url):
     width, height = DEVICES[device]
     for scheme in SCHEMES:
-        page = make_page(width=width, height=height, color_scheme=scheme)
+        page = make_page(width=width, height=height, color_scheme=scheme, fast_jobs=True)
         shot = _shooter(device, scheme)
 
         # 1. what a person sees first, from the top and then the whole page

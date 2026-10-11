@@ -28,6 +28,13 @@ def load_reference_module() -> ModuleType:
     return module
 
 
+@lru_cache(maxsize=1)
+def shared_reader(reference: Any) -> Any:
+    """The published method's reader, built once per reference module and shared by every
+    PaperMethod on it. Building it loads a 525 MB question-answering model."""
+    return reference.build_reader()
+
+
 class PaperMethod:
     """The paper's hybrid retrieval and extractive reader, run over consultqa chunks."""
 
@@ -44,19 +51,36 @@ class PaperMethod:
             self._ids_by_text.setdefault(chunk.text, []).append(chunk.chunk_id)
         if retriever is None and reader is None:
             retriever = self._ref.Retriever([chunk.text for chunk in chunks])
-            reader = self._ref.build_reader()
+            reader = shared_reader(self._ref)
         self._retriever = retriever
         self._reader = reader
+        # The last question and its passages. The ranking and the answer of one question share
+        # one search, so the same question is not searched twice.
+        self._memo: tuple[str, list[str]] | None = None
+
+    def _passages(self, query: str) -> list[str]:
+        """The hybrid candidate passages of ``query``, from the memo when it holds this question."""
+        memo = self._memo
+        if memo is None or memo[0] != query:
+            memo = (query, self._ref.candidate_passages(self._retriever, query, "hybrid"))
+            self._memo = memo
+        return list(memo[1])
 
     def ranked_chunk_ids(self, query: str) -> list[str]:
         """Chunk ids in the order the hybrid retriever ranks their passages."""
-        passages = self._ref.candidate_passages(self._retriever, query, "hybrid")
-        return [self._ids_by_text[text][0] for text in passages]
+        return [self._ids_by_text[text][0] for text in self._passages(query)]
 
     def ids_for_text(self, text: str) -> list[str]:
         """Every chunk id whose text equals ``text``."""
         return list(self._ids_by_text.get(text, []))
 
     def answer(self, query: str) -> str:
-        """The reference answer: the reader sees only the first unique hybrid passage."""
-        return self._ref.answer(self._retriever, self._reader, query, "hybrid")
+        """The reference answer: the reader sees only the first unique hybrid passage.
+
+        This is the reference module's ``answer`` with the passages taken from the memo, so the
+        question is not searched again.
+        """
+        passages = self._passages(query)
+        if not passages:
+            return self._ref.NO_CONTEXT_ANSWER
+        return str(self._reader(question=query, context=passages[0])["answer"])

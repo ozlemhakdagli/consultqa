@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     error TEXT,
     updated_at TEXT NOT NULL
 );
+-- The lookups by document and by collection. IF NOT EXISTS also adds them to older databases.
+CREATE INDEX IF NOT EXISTS ix_chunks_collection_document_position
+    ON chunks (collection_id, document_id, position);
+CREATE INDEX IF NOT EXISTS ix_chunks_document ON chunks (document_id);
+CREATE INDEX IF NOT EXISTS ix_jobs_collection ON jobs (collection_id);
 """
 
 

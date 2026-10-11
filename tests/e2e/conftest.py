@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -16,7 +17,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from playwright.sync_api import Browser, Page, Playwright
+    from playwright.sync_api import Browser, BrowserContext, Page, Playwright
 
 # The browser tests need `pip install -e ".[e2e]"`; without Playwright they are not collected.
 if importlib.util.find_spec("playwright") is None:
@@ -24,6 +25,9 @@ if importlib.util.find_spec("playwright") is None:
 
 ROOT = Path(__file__).resolve().parents[2]
 IGNORED_CONSOLE_PREFIX = "Failed to load resource"
+# The short job poll of the opt-in fixture, in milliseconds. The page default is 1000.
+FAST_JOB_POLL_MS = 50
+_JOB_POLL_LINE = re.compile(r"^export const JOB_POLL_MS = \d+;$", re.MULTILINE)
 
 
 @pytest.fixture(scope="session")
@@ -114,9 +118,24 @@ def fresh_server(playwright_driver: Playwright, tmp_path: Path) -> Iterator[str]
         yield url
 
 
+def _serve_fast_job_polling(context: BrowserContext) -> None:
+    """Serve /js/config.js with a short JOB_POLL_MS to every page of this browser context.
+
+    The module is the file the server serves (frontend/js/config.js); only the poll line changes.
+    """
+    source = (ROOT / "frontend" / "js" / "config.js").read_text(encoding="utf-8")
+    fast, count = _JOB_POLL_LINE.subn(f"export const JOB_POLL_MS = {FAST_JOB_POLL_MS};", source)
+    assert count == 1, "frontend/js/config.js must export JOB_POLL_MS exactly once"
+    context.route(
+        "**/js/config.js",
+        lambda route: route.fulfill(status=200, content_type="text/javascript", body=fast),
+    )
+
+
 @pytest.fixture
 def make_page(browser: Browser) -> Iterator[Callable[..., Page]]:
-    """Open pages in fresh contexts; fail the test on console errors and page errors."""
+    """Open pages in fresh contexts; fail the test on console errors and page errors.
+    With ``fast_jobs=True`` the page polls ingestion jobs every FAST_JOB_POLL_MS (opt-in)."""
     contexts = []
     problems: list[str] = []
 
@@ -127,6 +146,7 @@ def make_page(browser: Browser) -> Iterator[Callable[..., Page]]:
         color_scheme: str = "light",
         reduced_motion: str = "no-preference",
         locale: str = "tr-TR",
+        fast_jobs: bool = False,
     ) -> Page:
         context = browser.new_context(
             viewport={"width": width, "height": height},
@@ -136,6 +156,8 @@ def make_page(browser: Browser) -> Iterator[Callable[..., Page]]:
             reduced_motion=reduced_motion,
         )
         contexts.append(context)
+        if fast_jobs:
+            _serve_fast_job_polling(context)
         page = context.new_page()
         page.set_default_timeout(10_000)
         page.on(
@@ -158,3 +180,11 @@ def make_page(browser: Browser) -> Iterator[Callable[..., Page]]:
 @pytest.fixture
 def page(make_page: Callable[..., Page]) -> Page:
     return make_page()
+
+
+@pytest.fixture
+def fast_job_polling(page: Page) -> None:
+    """Opt-in for the tests that upload through the UI: the page polls an ingestion job every
+    FAST_JOB_POLL_MS instead of 1 s. Request it with ``pytest.mark.usefixtures``; the polling
+    tests leave it out and keep the default timing."""
+    _serve_fast_job_polling(page.context)

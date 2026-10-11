@@ -28,6 +28,7 @@ def _delete_button(page, name):
     return _folder_row(page, name).get_by_role("button", name=f"{name} klasörünü sil", exact=True)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_confirming_the_deletion_removes_the_folder_and_its_documents(page, base_url):
     name = unique("Silinecek")
     document = unique("belge") + ".md"
@@ -57,6 +58,7 @@ def test_confirming_the_deletion_removes_the_folder_and_its_documents(page, base
     expect(page.locator("#document-list li").filter(has_text=document)).to_have_count(0)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_dismissing_the_confirmation_deletes_nothing(page, base_url):
     name = unique("Kalacak")
     document = unique("belge") + ".md"

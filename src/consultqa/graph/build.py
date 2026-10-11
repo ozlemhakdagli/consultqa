@@ -7,7 +7,7 @@ import json
 import math
 import struct
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 import scipy.sparse
@@ -112,22 +112,8 @@ def build_graph(chunks: Sequence[Chunk]) -> EvidenceGraph:
         if following is not None:
             connect(f"c:{chunk.chunk_id}", f"c:{following.chunk_id}", NEXT_CHUNK_WEIGHT)
 
-    # A reference such as "Bölüm 3" links to chunks of the same document whose
-    # top-level heading starts with that number.
-    headed = [chunk for chunk in chunk_list if chunk.heading_path]
-    for chunk in chunk_list:
-        for number in sorted(cross_references(chunk.text)):
-            for target in headed:
-                if (
-                    target.doc_id == chunk.doc_id
-                    and target.chunk_id != chunk.chunk_id
-                    and _heading_has_number(target.heading_path[0], number)
-                ):
-                    connect(
-                        f"c:{chunk.chunk_id}",
-                        f"c:{target.chunk_id}",
-                        CROSS_REFERENCE_WEIGHT,
-                    )
+    for chunk, target in _cross_reference_pairs(chunk_list):
+        connect(f"c:{chunk.chunk_id}", f"c:{target.chunk_id}", CROSS_REFERENCE_WEIGHT)
 
     size = len(nodes)
     adjacency = scipy.sparse.coo_matrix((weights, (rows, cols)), shape=(size, size)).tocsr()
@@ -137,6 +123,27 @@ def build_graph(chunks: Sequence[Chunk]) -> EvidenceGraph:
         node_index=node_index,
         adjacency=adjacency,
     )
+
+
+def _cross_reference_pairs(chunks: Sequence[Chunk]) -> Iterator[tuple[Chunk, Chunk]]:
+    """Yield (citing chunk, target chunk) for every cross reference, in graph connection order.
+
+    A reference such as "Bölüm 3" points to chunks of the same document whose top-level
+    heading starts with that number. Only the headed chunks of the citing chunk's own
+    document are scanned.
+    """
+    headed_by_doc: dict[str, list[Chunk]] = {}
+    for chunk in chunks:
+        if chunk.heading_path:
+            headed_by_doc.setdefault(chunk.doc_id, []).append(chunk)
+    for chunk in chunks:
+        targets = headed_by_doc.get(chunk.doc_id, [])
+        for number in sorted(cross_references(chunk.text)):
+            for target in targets:
+                if target.chunk_id != chunk.chunk_id and _heading_has_number(
+                    target.heading_path[0], number
+                ):
+                    yield chunk, target
 
 
 def _section_id(doc_id: str, heading_path: tuple[str, ...]) -> str:

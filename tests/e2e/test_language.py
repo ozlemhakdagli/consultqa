@@ -65,6 +65,7 @@ def test_the_page_opens_in_the_browser_language(make_page, base_url, locale, lan
     expect(page.locator(f"#language-switch input[value={language}]")).to_be_checked()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_switch_changes_every_visible_text_and_is_remembered(page, base_url):
     collection_with_document(page, base_url)
     _ask(page, "Stok modülü")
@@ -108,6 +109,7 @@ def test_the_switch_changes_every_visible_text_and_is_remembered(page, base_url)
     expect(page.locator("html")).to_have_attribute("lang", "tr")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_no_interface_text_of_the_other_language_is_left(page, base_url):
     collection_with_document(page, base_url)
     _ask(page, "Stok modülü")
@@ -138,6 +140,7 @@ def test_the_switch_works_when_storage_is_blocked(make_page, base_url):
     expect(page.locator("html")).to_have_attribute("lang", "tr")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_switching_clears_notices_and_cancels_an_open_delete_confirmation(page, base_url):
     collection_with_document(page, base_url)
     page.get_by_label("Sorunuz", exact=True).fill("   ")

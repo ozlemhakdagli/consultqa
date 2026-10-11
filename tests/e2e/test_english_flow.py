@@ -24,7 +24,7 @@ def _ask(page, question: str = QUESTION) -> None:
 
 
 def test_an_english_document_is_uploaded_asked_and_cited_in_english(make_page, fresh_server):
-    page = make_page(locale="en-US")
+    page = make_page(locale="en-US", fast_jobs=True)
     open_page(page, fresh_server)
     upload_and_wait(page, "policy.md", ENGLISH, "en")
     _ask(page)
@@ -42,7 +42,7 @@ def test_an_english_document_is_uploaded_asked_and_cited_in_english(make_page, f
 
 
 def test_an_unanswerable_english_question_shows_the_english_not_found_card(make_page, fresh_server):
-    page = make_page(locale="en-US")
+    page = make_page(locale="en-US", fast_jobs=True)
     open_page(page, fresh_server)
     upload_and_wait(page, "policy.md", ENGLISH, "en")
     page.route(
@@ -62,7 +62,7 @@ def test_an_unanswerable_english_question_shows_the_english_not_found_card(make_
 
 
 def test_english_errors_and_upload_failures_are_in_english(make_page, fresh_server):
-    page = make_page(locale="en-US")
+    page = make_page(locale="en-US", fast_jobs=True)
     open_page(page, fresh_server)
     page.locator("#upload-files").set_input_files(
         [

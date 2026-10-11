@@ -40,6 +40,7 @@ def _ask(page, question="Stok modülü"):
     page.get_by_role("button", name=ASK).click()
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_source_is_shown_in_full_with_the_answer_sentence_marked(page, base_url):
     collection_with_document(page, base_url)
     _mock_answer(page, ANSWER)
@@ -57,6 +58,7 @@ def test_the_source_is_shown_in_full_with_the_answer_sentence_marked(page, base_
     expect(page.get_by_role("button", name="Kaynağın metnini göster")).to_have_count(0)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_an_answer_that_is_not_inside_the_passage_marks_nothing_and_claims_nothing(page, base_url):
     collection_with_document(page, base_url)
     _mock_answer(page, "başka bir ifade")
@@ -67,6 +69,7 @@ def test_an_answer_that_is_not_inside_the_passage_marks_nothing_and_claims_nothi
     expect(page.locator(".answer-card .note")).to_have_text(NOTE_NO_MARK)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_ai_answer_shows_its_sources_open_and_marks_nothing(page, base_url):
     collection_with_document(page, base_url)
     choose_method(page, "Yapay zekâ ile yazılmış cevap")
@@ -79,6 +82,7 @@ def test_the_ai_answer_shows_its_sources_open_and_marks_nothing(page, base_url):
     expect(page.locator("#cite-1")).to_have_attribute("data-active", "true")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_passage_text_is_never_parsed_as_html(page, base_url):
     collection_with_document(page, base_url)
     text = "Önce bir cümle. Bu <script>window.__pwned = 1</script> içerir. Sonra bir cümle."

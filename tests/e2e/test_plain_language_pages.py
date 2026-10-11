@@ -46,6 +46,7 @@ def test_the_disabled_ai_mode_is_plain(page, base_url):
     _clean(page)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_answer_not_found_and_error_states_are_plain(page, base_url):
     collection_with_document(page, base_url)
     _ask(page)
@@ -77,6 +78,7 @@ def test_answer_not_found_and_error_states_are_plain(page, base_url):
     _clean(page)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_upload_rows_and_failures_are_plain(page, base_url):
     new_library(page, base_url)
     open_page(page, base_url)
@@ -90,6 +92,7 @@ def test_upload_rows_and_failures_are_plain(page, base_url):
     _clean(page)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_theme_switch_the_notice_and_the_marked_answer_are_plain(page, base_url):
     caps = caps_without_llm(page, base_url)
     page.route("**/api/capabilities", lambda route: route.fulfill(json=caps))

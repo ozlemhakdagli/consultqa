@@ -40,7 +40,7 @@ def test_narrow_screens_stack_everything_in_reading_order(make_page, base_url, w
 
 
 def test_the_answer_stays_in_view_beside_the_form(make_page, base_url):
-    page = make_page(width=1280, height=600)
+    page = make_page(width=1280, height=600, fast_jobs=True)
     collection_with_document(page, base_url)
     open_advanced(page)
     page.get_by_label("Sorunuz", exact=True).fill("Stok modülü")
@@ -53,7 +53,7 @@ def test_the_answer_stays_in_view_beside_the_form(make_page, base_url):
 
 
 def test_a_tall_answer_scrolls_inside_its_panel(make_page, base_url):
-    page = make_page(width=1280, height=700)
+    page = make_page(width=1280, height=700, fast_jobs=True)
     collection_with_document(page, base_url)
     text = " ".join(f"Cümle {n} burada yer alır." for n in range(1, 80))
     body = {
@@ -80,7 +80,7 @@ def test_a_tall_answer_scrolls_inside_its_panel(make_page, base_url):
 
 
 def test_on_a_wide_screen_the_answer_does_not_move_the_page(make_page, base_url):
-    page = make_page(width=1280, height=600)
+    page = make_page(width=1280, height=600, fast_jobs=True)
     collection_with_document(page, base_url)
     open_advanced(page)
     # The question is typed first: filling a box that is out of view scrolls it into view, and that

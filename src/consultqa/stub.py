@@ -43,6 +43,9 @@ class HashEncoder:
     def encode_query(self, text: str) -> np.ndarray:
         return self._vector(text)
 
+    def get_sentence_embedding_dimension(self) -> int:
+        return self.dim
+
 
 class StubScorer:
     """Cross-encoder stand-in: scores each text by the number of distinct query tokens it shares."""

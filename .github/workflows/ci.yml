@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  # Ruff only: no ML stack, so the check finishes without the torch install.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff only
+        run: pip install ruff==0.16.10
+      - run: ruff check .
+      - run: ruff format --check .
+
   lint-test:
     runs-on: ubuntu-latest
     services:
@@ -22,12 +35,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install CPU torch, then the project with all extras
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
           pip install -e ".[core,ml,pdf,api,dev]"
-      - run: ruff check .
-      - run: ruff format --check .
       - name: Wait for Qdrant
         run: curl -fsS --retry 30 --retry-connrefused --retry-delay 1 http://localhost:6333/collections
       - name: Tests
@@ -40,10 +52,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Builds the image that compose.yml names (consultqa:dev) and reuses the layers of earlier runs.
+      - name: Build the app image with the GitHub Actions cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: consultqa:dev
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Start the stack with the stub backend
         env:
           CONSULTQA_BACKEND: stub
-        run: docker compose up -d --wait app
+        run: docker compose up -d --no-build --wait app
       - name: Readiness check
         run: curl -fsS http://localhost:8000/api/ready
       - name: Page and capabilities check

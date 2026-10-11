@@ -8,6 +8,7 @@ pytestmark = pytest.mark.e2e
 ASK_BUTTON = "Cevabı bul"
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_every_control_has_an_accessible_name(page, base_url):
     collection_with_document(page, base_url)
     open_advanced(page)
@@ -20,6 +21,7 @@ def test_every_control_has_an_accessible_name(page, base_url):
         assert f'"{name}"' in snapshot, name
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_the_ask_form_works_with_the_keyboard_alone(page, base_url):
     collection_with_document(page, base_url)
     page.get_by_label("Sorunuz", exact=True).focus()
@@ -36,7 +38,7 @@ def test_the_ask_form_works_with_the_keyboard_alone(page, base_url):
 
 # Review Focus 5
 def test_no_horizontal_scroll_on_a_phone(make_page, base_url):
-    page = make_page(width=360, height=740)
+    page = make_page(width=360, height=740, fast_jobs=True)
     long_name = "x" * 100 + ".md"
     collection_with_document(
         page,
@@ -58,6 +60,7 @@ def test_the_first_screen_on_a_phone_shows_what_to_do(make_page, base_url):
     assert button["y"] + button["height"] <= 844  # visible without scrolling
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_touch_targets_are_at_least_44_pixels_high(page, base_url):
     collection_with_document(page, base_url)
     for locator in (

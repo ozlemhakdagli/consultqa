@@ -1,8 +1,7 @@
 # Builder: a virtualenv with CPU torch, the pinned requirements and the consultqa package.
 FROM python:3.11.17-slim-trixie AS builder
 
-ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
@@ -10,12 +9,17 @@ ENV PATH=/opt/venv/bin:$PATH
 WORKDIR /build
 COPY requirements.txt ./
 # CPU torch comes first, so the pinned torch in requirements.txt is already satisfied.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 torchvision==0.29.1 \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 torchvision==0.29.1 \
  && pip install -r requirements.txt
 
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-deps .
+RUN --mount=type=cache,target=/root/.cache/pip pip install --no-deps .
+# Shrink the venv before the runtime stage copies it: no test folders, and no pip or setuptools,
+# because the container only runs uvicorn. A failed uninstall fails the build.
+RUN find /opt/venv/lib/python3.11/site-packages -type d -name tests -prune -exec rm -rf {} + \
+ && python -m pip uninstall -y pip setuptools
 
 # Runtime: the virtualenv, the package and the model fetch script, run as a non-root user.
 FROM python:3.11.17-slim-trixie AS runtime

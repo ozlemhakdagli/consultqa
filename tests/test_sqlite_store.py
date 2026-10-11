@@ -106,3 +106,91 @@ def test_collections_are_listed_with_their_document_count(tmp_path):
     store.add_document(full, "d2", "s2", "g.txt", [Chunk("d2#0", "d2", 0, (), "u")])
     counts = {row["id"]: row["document_count"] for row in store.list_collections()}
     assert counts == {empty: 0, full: 2}
+
+
+# The lookup indexes: the per-document and per-collection queries search them, not every row.
+LOOKUP_INDEXES = {
+    "ix_chunks_collection_document_position": ["collection_id", "document_id", "position"],
+    "ix_chunks_document": ["document_id"],
+    "ix_jobs_collection": ["collection_id"],
+}
+
+
+def _query_plan(path, sql, params=()):
+    conn = sqlite3.connect(path)
+    try:
+        return [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + sql, params)]
+    finally:
+        conn.close()
+
+
+def _lookup_indexes(path):
+    conn = sqlite3.connect(path)
+    try:
+        found = {}
+        for table in ("chunks", "jobs"):
+            for row in conn.execute(f"PRAGMA index_list({table})").fetchall():
+                if row[1].startswith("ix_"):
+                    found[row[1]] = [col[2] for col in conn.execute(f"PRAGMA index_info({row[1]})")]
+        return found
+    finally:
+        conn.close()
+
+
+def _assert_searched_by_index(plan, table):
+    assert not any(step.startswith(f"SCAN {table}") for step in plan), plan
+    assert any(step.startswith(f"SEARCH {table} USING") for step in plan), plan
+
+
+def test_a_new_database_has_the_lookup_indexes(tmp_path):
+    path = tmp_path / "s.sqlite3"
+    SqliteStore(path)
+    assert _lookup_indexes(path) == LOOKUP_INDEXES
+
+
+def test_an_existing_database_gets_the_missing_indexes_when_it_opens(tmp_path):
+    path = tmp_path / "s.sqlite3"
+    SqliteStore(path)
+    conn = sqlite3.connect(path)
+    for name in LOOKUP_INDEXES:
+        conn.execute(f"DROP INDEX IF EXISTS {name}")
+    conn.commit()
+    conn.close()
+    SqliteStore(path)
+    assert _lookup_indexes(path) == LOOKUP_INDEXES
+
+
+def test_document_chunk_ids_searches_the_index_in_position_order(tmp_path):
+    path = tmp_path / "s.sqlite3"
+    SqliteStore(path)
+    plan = _query_plan(
+        path,
+        "SELECT chunk_id FROM chunks WHERE collection_id = ? AND document_id = ? ORDER BY position",
+        ("c", "d"),
+    )
+    _assert_searched_by_index(plan, "chunks")
+    assert not any("TEMP B-TREE" in step for step in plan), plan
+
+
+def test_the_delete_cascade_searches_chunks_by_document(tmp_path):
+    path = tmp_path / "s.sqlite3"
+    SqliteStore(path)
+    # The lookup SQLite runs for ON DELETE CASCADE from documents to chunks.document_id.
+    plan = _query_plan(path, "DELETE FROM chunks WHERE document_id = ?", ("d",))
+    _assert_searched_by_index(plan, "chunks")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # SqliteStore.has_active_jobs
+        "SELECT 1 FROM jobs WHERE collection_id = ?"
+        " AND state NOT IN ('done', 'failed', 'interrupted') LIMIT 1",
+        # SqliteStore.delete_collection
+        "DELETE FROM jobs WHERE collection_id = ?",
+    ],
+)
+def test_jobs_of_a_collection_are_searched_by_index(tmp_path, sql):
+    path = tmp_path / "s.sqlite3"
+    SqliteStore(path)
+    _assert_searched_by_index(_query_plan(path, sql, ("c",)), "jobs")

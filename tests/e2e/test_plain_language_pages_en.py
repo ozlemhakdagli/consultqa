@@ -50,7 +50,7 @@ def test_the_disabled_ai_mode_and_the_notice_are_plain_in_english(make_page, bas
 
 
 def test_answer_not_found_and_error_states_are_plain_in_english(make_page, base_url):
-    page = make_page(locale="en-US")
+    page = make_page(locale="en-US", fast_jobs=True)
     new_library(page, base_url)
     open_page(page, base_url)
     upload_and_wait(page, "policy.md", ENGLISH, "en")
@@ -78,7 +78,7 @@ def test_answer_not_found_and_error_states_are_plain_in_english(make_page, base_
 
 
 def test_upload_rows_and_failures_are_plain_in_english(make_page, base_url):
-    page = make_page(locale="en-US")
+    page = make_page(locale="en-US", fast_jobs=True)
     new_library(page, base_url)
     open_page(page, base_url)
     page.locator("#upload-files").set_input_files(

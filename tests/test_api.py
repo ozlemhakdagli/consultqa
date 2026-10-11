@@ -1,7 +1,6 @@
 """HTTP API with the stub backend: error contract, ingestion, questions and passage search."""
 
 import httpx
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from store_rows import rows_left
@@ -416,18 +415,18 @@ def test_delete_is_refused_until_the_models_are_ready(services):
 
 
 class CountingEncoder:
-    """Stands in for the sentence encoder and counts the calls made to learn the dimension."""
+    """Stands in for the sentence encoder and counts the calls made to read the dimension."""
 
     def __init__(self, dim: int) -> None:
         self.dim = dim
         self.calls = 0
 
-    def encode_query(self, text: str) -> np.ndarray:
+    def get_sentence_embedding_dimension(self) -> int:
         self.calls += 1
-        return np.zeros(self.dim, dtype=np.float32)
+        return self.dim
 
 
-def test_dimension_is_learnt_by_one_encoder_call(services):
+def test_dimension_is_read_once_from_the_encoder(services):
     encoder = CountingEncoder(dim=8)
     dims: list[int] = []
     services.encoder = encoder
@@ -500,6 +499,8 @@ def test_delete_collection_is_refused_until_the_models_are_ready(services):
 def test_delete_removes_every_database_row_of_the_collection(services, client):
     cid = _collection(client)
     _upload(client, cid, TWO_SECTIONS)
+    # Ingestion stores no graph any more, so a graph row from an earlier version is put in by hand.
+    services.store.save_graph(cid, b"graph saved by an earlier version")
     path = services.settings.state_dir / DB_FILENAME
     assert all(count > 0 for count in rows_left(path, cid).values())
     assert client.delete(f"/api/collections/{cid}").status_code == 204
@@ -580,3 +581,16 @@ def test_a_vector_store_that_is_down_keeps_the_collection_for_a_retry(services, 
     assert r.json() == {"detail": "vector_store_unavailable"}
     assert cid in _folder_ids(client)
     assert len(client.get(f"/api/collections/{cid}/documents").json()) == 1
+
+
+# O11: an upload that writes nothing (no text, or the same content again) keeps the state.
+def test_only_an_upload_that_wrote_drops_the_retrieval_state(services, client, monkeypatch):
+    dropped: list[str] = []
+    monkeypatch.setattr(services, "invalidate", dropped.append)
+    cid = _collection(client)
+    assert _upload(client, cid, "").status_code == 202
+    assert dropped == []
+    assert _upload(client, cid, TWO_SECTIONS).status_code == 202
+    assert dropped == [cid]
+    assert _upload(client, cid, TWO_SECTIONS, name="copy.txt").status_code == 202
+    assert dropped == [cid]

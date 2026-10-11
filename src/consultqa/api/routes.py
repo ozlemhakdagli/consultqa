@@ -219,7 +219,7 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
 
     @router.delete("/collections/{cid}/documents/{doc_id}", status_code=204)
     def remove_document(cid: str, doc_id: str) -> Response:
-        """Delete a document with its vectors, chunks and graph rows."""
+        """Delete a document with its vectors and chunks."""
         require_ready()
         # Under the lock a deletion of the folder holds, so the vector store is not built again.
         with services.collections_lock:
@@ -297,9 +297,12 @@ def _ingest_job(
     filename: str,
     staging: tempfile.TemporaryDirectory,
 ) -> None:
-    """Run one ingestion job, then drop the cached retrieval state and the staged upload."""
+    """Run one ingestion job, drop the cached retrieval state if it wrote anything, and remove the
+    staged upload."""
+    # Assumed to have written until the job says otherwise, so a job that raised drops the state.
+    wrote = True
     try:
-        ingest_file(
+        wrote = ingest_file(
             store=services.store,
             parser=services.parser,
             encoder=services.encoder,
@@ -316,7 +319,8 @@ def _ingest_job(
         logger.exception("ingestion job %s could not start", job_id)
         services.store.set_job(job_id, "failed", "internal_error")
     finally:
-        services.invalidate(cid)
+        if wrote:
+            services.invalidate(cid)
         staging.cleanup()
 
 

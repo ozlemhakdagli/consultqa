@@ -1,11 +1,117 @@
 import re
+from types import SimpleNamespace
 
 import pytest
+import torch
 from pdf_fixtures import write_pdf
 
-from consultqa.ingest.parse import DocumentParser, ParseError, TextParser, get_parser
+from consultqa.ingest.parse import DoclingParser, DocumentParser, ParseError, TextParser, get_parser
 
 TURKISH_SENTENCE = "Ölçü birimi kilogram veya litre olarak seçilir."
+
+
+class _FakeConverter:
+    """Stands in for Docling's DocumentConverter. Like Docling, it sets torch to 4 threads."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
+    def convert(self, source, **kwargs):
+        from docling.datamodel.base_models import ConversionStatus
+
+        torch.set_num_threads(4)
+        if self.error is not None:
+            raise self.error
+        return SimpleNamespace(
+            input=SimpleNamespace(page_count=1),
+            status=ConversionStatus.SUCCESS,
+            document=SimpleNamespace(export_to_markdown=lambda: "# Başlık\nmetin"),
+        )
+
+
+@pytest.fixture
+def eight_torch_threads():
+    """Run the test with torch at 8 threads, then put the process-wide count back."""
+    original = torch.get_num_threads()
+    torch.set_num_threads(8)
+    yield
+    torch.set_num_threads(original)
+
+
+def _pdf_parser_with(fake, monkeypatch):
+    parser = DoclingParser(max_pages=10)
+    monkeypatch.setattr(parser, "_get_converter", lambda: fake)
+    return parser
+
+
+# O1: Docling's 4 threads last only for its own conversion; the caller's count comes back.
+def test_parse_restores_torch_threads_after_docling_converts(
+    tmp_path, monkeypatch, eight_torch_threads
+):
+    path = tmp_path / "a.pdf"
+    path.write_bytes(b"fake pdf")
+    parser = _pdf_parser_with(_FakeConverter(), monkeypatch)
+    before = torch.get_num_threads()
+    assert parser.parse(path) == "# Başlık\nmetin"
+    assert torch.get_num_threads() == before
+
+
+def test_parse_restores_torch_threads_when_conversion_raises(
+    tmp_path, monkeypatch, eight_torch_threads
+):
+    path = tmp_path / "a.pdf"
+    path.write_bytes(b"fake pdf")
+    parser = _pdf_parser_with(_FakeConverter(error=RuntimeError("boom")), monkeypatch)
+    before = torch.get_num_threads()
+    with pytest.raises(ParseError) as info:
+        parser.parse(path)
+    assert info.value.code == "parse_failed"
+    assert torch.get_num_threads() == before
+
+
+class _WarmConverter:
+    """Stands in for Docling's converter for ``warm_up``. Like Docling, it sets torch to 4 threads
+    while it builds a pipeline, and it records each format it was asked for."""
+
+    def __init__(self) -> None:
+        self.formats: list[object] = []
+
+    def initialize_pipeline(self, pipeline_format) -> None:
+        torch.set_num_threads(4)
+        self.formats.append(pipeline_format)
+
+
+# O5: warm_up builds the PDF pipeline once, and gives back the caller's torch thread count.
+def test_warm_up_builds_the_pdf_pipeline_once(monkeypatch, eight_torch_threads):
+    from docling.datamodel.base_models import InputFormat
+
+    fake = _WarmConverter()
+    parser = _pdf_parser_with(fake, monkeypatch)
+    parser.warm_up()
+    parser.warm_up()
+    assert fake.formats == [InputFormat.PDF]
+
+
+def test_warm_up_restores_torch_threads(monkeypatch, eight_torch_threads):
+    parser = _pdf_parser_with(_WarmConverter(), monkeypatch)
+    before = torch.get_num_threads()
+    parser.warm_up()
+    assert torch.get_num_threads() == before
+
+
+def test_failed_warm_up_raises_and_a_later_call_tries_again(monkeypatch):
+    class Broken(_WarmConverter):
+        def initialize_pipeline(self, pipeline_format) -> None:
+            self.formats.append(pipeline_format)
+            raise RuntimeError("models missing")
+
+    fake = Broken()
+    parser = _pdf_parser_with(fake, monkeypatch)
+    with pytest.raises(RuntimeError):
+        parser.warm_up()
+    with pytest.raises(RuntimeError):
+        parser.warm_up()
+    assert len(fake.formats) == 2
 
 
 def test_text_parser_keeps_turkish_characters(tmp_path):

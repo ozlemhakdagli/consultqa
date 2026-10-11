@@ -1,9 +1,9 @@
 """Service container: the components the API uses, built once per process.
 
 ``build_services`` picks the stub or the real components from ``Settings.backend``. Retrieval
-state of a collection (dense channel, in-process BM25, evidence graph and one ``Retriever`` per
-preset) is built on first use and dropped by ``Services.invalidate`` after an ingestion or a
-deletion.
+state of a collection (dense channel, in-process BM25, one ``Retriever`` per preset, and the
+evidence graph for the presets that expand through it) is built on first use and dropped by
+``Services.invalidate`` after an ingestion or a deletion.
 """
 
 import logging
@@ -86,7 +86,11 @@ class Answer:
 
 
 class CollectionIndex:
-    """Retrieval state of one collection, built from its stored chunks and reused."""
+    """Retrieval state of one collection, built from its stored chunks and reused.
+
+    The evidence graph is built from the chunks the first time a preset that expands through it
+    asks for it. Presets without the graph never build it.
+    """
 
     def __init__(
         self,
@@ -94,7 +98,6 @@ class CollectionIndex:
         *,
         dense: DenseChannel,
         sparse: SparseChannel,
-        graph: EvidenceGraph,
         scorer: Scorer | None,
     ) -> None:
         self.chunks = list(chunks)
@@ -104,10 +107,18 @@ class CollectionIndex:
         self._chunks_by_id = {chunk.chunk_id: chunk for chunk in self.chunks}
         self._dense = dense
         self._sparse = sparse
-        self._graph = graph
+        self._graph: EvidenceGraph | None = None
+        self._graph_lock = threading.Lock()
         self._scorer = scorer
         self._retrievers: dict[str, Retriever] = {}
         self._paper: PaperMethod | None = None
+
+    def graph(self) -> EvidenceGraph:
+        """The evidence graph of the chunks, built on first use and then reused."""
+        with self._graph_lock:
+            if self._graph is None:
+                self._graph = build_graph(self.chunks)
+            return self._graph
 
     def retriever(self, cfg: PipelineConfig) -> Retriever:
         """The retriever of one preset, built on first use."""
@@ -118,7 +129,7 @@ class CollectionIndex:
                 self.chunks,
                 dense=self._dense,
                 sparse=self._sparse,
-                graph=self._graph,
+                graph=self.graph() if cfg.use_graph else None,
                 scorer=self._scorer,
             )
             self._retrievers[cfg.name] = retriever
@@ -151,6 +162,13 @@ class Services:
     ready: threading.Event
     count_tokens: Callable[[str], int]
     forget_dense: Callable[[str], None]
+    # The real backend leaves ``scorer`` and ``reader`` unset and gives these builders instead; the
+    # loader thread calls them after the encoder, so the port opens before the models are in memory.
+    load_scorer: Callable[[], Scorer] | None = None
+    load_reader: Callable[[], Reader] | None = None
+    # The real backend gives the parser's warm-up, which the loader calls after ``ready`` is set.
+    # The stub backend loads no model, so it has none.
+    warm_parser: Callable[[], None] | None = None
     _indexes: dict[str, CollectionIndex] = field(default_factory=dict, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     # Held by the steps that add a job to a collection and by its deletion, so that the two never
@@ -186,11 +204,15 @@ class Services:
             self.invalidate(cid)
         return True
 
-    def dense(self, cid: str) -> DenseBackend:
-        """The dense store of one collection. The encoder runs once, to learn the dimension."""
+    def embedding_dimension(self) -> int:
+        """The length of the encoder's vectors, read once from the encoder without encoding text."""
         if self._dim is None:
-            self._dim = int(self.encoder.encode_query("dimension").shape[0])
-        return self.make_dense(cid, self._dim)
+            self._dim = int(self.encoder.get_sentence_embedding_dimension())
+        return self._dim
+
+    def dense(self, cid: str) -> DenseBackend:
+        """The dense store of one collection, sized by the encoder's dimension."""
+        return self.make_dense(cid, self.embedding_dimension())
 
     def index(self, cid: str) -> CollectionIndex:
         """The retrieval state of a collection. Holding the lock while building keeps an
@@ -208,18 +230,11 @@ class Services:
         if self.store.get_collection(cid) is None:
             raise CollectionMissing(cid)
         chunks = self.store.list_chunks(cid)
-        raw_graph = self.store.load_graph(cid)
-        if raw_graph is None:
-            graph = build_graph(chunks)
-            self.store.save_graph(cid, graph.to_bytes())
-        else:
-            graph = EvidenceGraph.from_bytes(raw_graph)
         dense = DenseChannel({c.chunk_id: c for c in chunks}, self.encoder, self.dense(cid))
         return CollectionIndex(
             chunks,
             dense=dense,
             sparse=SparseChannel(chunks, per_document_fold=True),
-            graph=graph,
             scorer=self.scorer,
         )
 
@@ -322,11 +337,16 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         artifacts_path=settings.docling_artifacts,
     )
 
+    scorer: Scorer | None = None
+    reader: Reader | None = None
+    load_scorer: Callable[[], Scorer] | None = None
+    load_reader: Callable[[], Reader] | None = None
+    warm_parser: Callable[[], None] | None = None
     if settings.backend == "stub":
         encoder: Encoder = HashEncoder(64)
         dense_stores = _DenseStores(lambda cid, dim: NumpyDenseBackend())
-        scorer: Scorer | None = StubScorer()
-        reader: Reader | None = StubReader()
+        scorer = StubScorer()
+        reader = StubReader()
         llm: ChatModel | None = StubLLM()
         count_tokens = count_words
     elif settings.backend == "real":
@@ -338,8 +358,9 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         dense_stores = _DenseStores(
             lambda cid, dim: QdrantDenseBackend(url, QDRANT_COLLECTION_PREFIX + cid, dim)
         )
-        scorer = load_cross_encoder()
-        reader = ExtractiveReader()
+        load_scorer = load_cross_encoder
+        load_reader = ExtractiveReader
+        warm_parser = parser.warm_up
         llm = _llm_client(settings)
         count_tokens = sentence_encoder.count_tokens
     else:
@@ -359,11 +380,14 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         ready=threading.Event(),
         count_tokens=count_tokens,
         forget_dense=dense_stores.forget,
+        load_scorer=load_scorer,
+        load_reader=load_reader,
+        warm_parser=warm_parser,
     )
 
 
 def load_in_background(services: Services) -> threading.Thread:
-    """Load the models in a daemon thread and set ``services.ready`` once they answer.
+    """Load the models in a daemon thread; ``services.ready`` is set once all of them are loaded.
 
     A failed load is logged and leaves ``ready`` unset, so ``/api/ready`` keeps answering 503.
     """
@@ -373,13 +397,32 @@ def load_in_background(services: Services) -> threading.Thread:
 
 
 def _load(services: Services) -> None:
+    """Load the encoder, then the reranker, then the reader, and only then set ``ready``.
+
+    The steps run one after another: loading two models in parallel crashed ("meta tensor"). After
+    ``ready`` is set, the parser is warmed, so readiness does not wait for Docling.
+    """
     try:
-        # The first call loads the sentence model; for the stub it costs nothing.
-        services.encoder.encode_query("consultqa")
+        services.embedding_dimension()  # loads the sentence model
+        if services.load_scorer is not None:
+            services.scorer = services.load_scorer()
+        if services.load_reader is not None:
+            services.reader = services.load_reader()
     except Exception:
         logger.exception("model loading failed; /api/ready stays unavailable")
         return
     services.ready.set()
+    _warm_parser(services)
+
+
+def _warm_parser(services: Services) -> None:
+    """Warm the parser's PDF pipeline. A failure is logged and the first PDF loads it instead."""
+    if services.warm_parser is None:
+        return
+    try:
+        services.warm_parser()
+    except Exception:
+        logger.exception("Docling warm-up failed; the first PDF will load the pipeline")
 
 
 class _DenseStores:

@@ -22,6 +22,10 @@ class Encoder(Protocol):
         """Return the vector of one query text."""
         ...
 
+    def get_sentence_embedding_dimension(self) -> int:
+        """Return the length of the vectors. Loads the model if it is not loaded yet."""
+        ...
+
 
 class DenseBackend(Protocol):
     """A store of passage vectors that answers nearest-neighbour queries."""
@@ -185,6 +189,9 @@ class SentenceEncoder:
 
     def encode_query(self, text: str) -> np.ndarray:
         return self._encode([self._spec.query_prefix + text])[0]
+
+    def get_sentence_embedding_dimension(self) -> int:
+        return int(self._load().get_sentence_embedding_dimension())
 
     def count_tokens(self, text: str) -> int:
         return len(self._load().tokenizer.encode(text))

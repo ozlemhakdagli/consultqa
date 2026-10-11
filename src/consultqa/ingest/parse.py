@@ -3,6 +3,7 @@
 Parsers raise ``ParseError`` with a stable code, and the ingestion job stores that code.
 """
 
+import threading
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -23,6 +24,9 @@ class Parser(Protocol):
 
     def parse(self, path: Path) -> str: ...
 
+    def warm_up(self) -> None:
+        """Load what the parser needs before its first file. Calling it again does nothing."""
+
 
 def _check_suffix(path: Path, suffixes: frozenset[str]) -> None:
     if path.suffix.lower() not in suffixes:
@@ -34,6 +38,9 @@ class TextParser:
 
     name = "text"
     suffixes = frozenset({".txt", ".md"})
+
+    def warm_up(self) -> None:
+        """Nothing to load: text is read from the file."""
 
     def parse(self, path: Path) -> str:
         _check_suffix(path, self.suffixes)
@@ -61,41 +68,77 @@ class DoclingParser:
         self.max_pages = max_pages
         self.artifacts_path = artifacts_path
         self._converter: Any = None
+        self._warmed = False
+        # The converter and torch's thread count are process-wide. A warm-up that runs while an
+        # upload is parsed must not build a second converter or leave the thread count wrong.
+        self._lock = threading.RLock()
 
     def _get_converter(self) -> Any:
-        if self._converter is None:
-            from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
-            from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
-            from docling.document_converter import DocumentConverter, PdfFormatOption
+        with self._lock:
+            if self._converter is None:
+                from docling.datamodel.accelerator_options import (
+                    AcceleratorDevice,
+                    AcceleratorOptions,
+                )
+                from docling.datamodel.base_models import InputFormat
+                from docling.datamodel.pipeline_options import PdfPipelineOptions
+                from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            pipeline = PdfPipelineOptions(
-                accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU),
-                artifacts_path=self.artifacts_path,
-            )
-            self._converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)}
-            )
-        return self._converter
+                pipeline = PdfPipelineOptions(
+                    accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU),
+                    artifacts_path=self.artifacts_path,
+                )
+                self._converter = DocumentConverter(
+                    format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)}
+                )
+            return self._converter
+
+    def warm_up(self) -> None:
+        """Build the converter and its PDF pipeline now, so the first PDF does not wait for them.
+
+        Docling sets torch to its thread count while it builds the pipeline, so the caller's count
+        is put back, as in ``parse``. A second call does nothing. A failure is raised and the
+        pipeline is built by the first PDF instead.
+        """
+        import torch
+        from docling.datamodel.base_models import InputFormat
+
+        with self._lock:
+            if self._warmed:
+                return
+            threads = torch.get_num_threads()
+            try:
+                self._get_converter().initialize_pipeline(InputFormat.PDF)
+            finally:
+                torch.set_num_threads(threads)
+            self._warmed = True
 
     def parse(self, path: Path) -> str:
         _check_suffix(path, self.suffixes)
-        try:
-            from docling.datamodel.base_models import ConversionStatus
+        import torch
 
-            # Docling checks the page count before it converts anything, and reports the count
-            # on the input even when it rejects the file, so the limit is enforced here.
-            result = self._get_converter().convert(
-                str(path), max_num_pages=self.max_pages, raises_on_error=False
-            )
-            pages = result.input.page_count
-            converted = result.status in (
-                ConversionStatus.SUCCESS,
-                ConversionStatus.PARTIAL_SUCCESS,
-            )
-            markdown = result.document.export_to_markdown() if converted else None
-        except Exception as exc:
-            raise ParseError("parse_failed") from exc
+        with self._lock:
+            # Docling sets torch to its own thread count (4) for the whole process after the first
+            # PDF. Keep the caller's count, so only the conversion runs at Docling's count.
+            threads = torch.get_num_threads()
+            try:
+                from docling.datamodel.base_models import ConversionStatus
+
+                # Docling checks the page count before it converts anything, and reports the count
+                # on the input even when it rejects the file, so the limit is enforced here.
+                result = self._get_converter().convert(
+                    str(path), max_num_pages=self.max_pages, raises_on_error=False
+                )
+                pages = result.input.page_count
+                converted = result.status in (
+                    ConversionStatus.SUCCESS,
+                    ConversionStatus.PARTIAL_SUCCESS,
+                )
+                markdown = result.document.export_to_markdown() if converted else None
+            except Exception as exc:
+                raise ParseError("parse_failed") from exc
+            finally:
+                torch.set_num_threads(threads)
         if pages > self.max_pages:
             raise ParseError("too_many_pages")
         if markdown is None:
@@ -112,6 +155,9 @@ class DocumentParser:
     def __init__(self, max_pages: int, artifacts_path: Path | None = None) -> None:
         self._pdf = DoclingParser(max_pages=max_pages, artifacts_path=artifacts_path)
         self._text = TextParser()
+
+    def warm_up(self) -> None:
+        self._pdf.warm_up()
 
     def parse(self, path: Path) -> str:
         _check_suffix(path, self.suffixes)

@@ -86,6 +86,7 @@ def test_status_is_honest_while_the_file_is_sent_and_prepared(page, base_url):
     expect(page.locator("#documents-live")).to_have_text("ocak.md: Kullanıma hazır")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_drop_adds_files_like_the_button(page, base_url):
     new_library(page, base_url)
     open_page(page, base_url)
@@ -120,6 +121,7 @@ def test_a_file_dropped_outside_the_area_does_not_open_in_the_browser(page, base
     assert page.url == url
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_rejected_files_get_a_clear_message_and_the_others_continue(page, base_url):
     new_library(page, base_url)
     open_page(page, base_url)
@@ -139,6 +141,7 @@ def test_rejected_files_get_a_clear_message_and_the_others_continue(page, base_u
     expect(_row(page, "iyi.txt")).to_contain_text("Kullanıma hazır", timeout=20000)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_server_side_failures_are_explained(page, base_url):
     new_library(page, base_url)
     open_page(page, base_url)
@@ -160,6 +163,7 @@ def test_server_side_failures_are_explained(page, base_url):
     expect(page.locator("#documents-empty")).to_have_text("Henüz belge eklemediniz.")
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_uploading_the_same_content_twice_is_reported(page, base_url):
     collection_with_document(page, base_url, filename="ilk.md")
     upload_text(page, "kopya.md")
@@ -169,6 +173,7 @@ def test_uploading_the_same_content_twice_is_reported(page, base_url):
     expect(_row(page, "kopya.md")).to_have_count(0)
 
 
+@pytest.mark.usefixtures("fast_job_polling")
 def test_delete_asks_for_confirmation_first(page, base_url):
     collection_with_document(page, base_url)
     page.get_by_role("button", name="ocak.md belgesini sil").click()
@@ -185,6 +190,7 @@ def test_delete_asks_for_confirmation_first(page, base_url):
 
 
 # Review Focus 1: server-provided text is never interpreted as HTML.
+@pytest.mark.usefixtures("fast_job_polling")
 def test_file_and_document_names_are_shown_as_text_never_as_html(page, base_url):
     name = "<img src=x onerror=window.__pwned=1>.txt"
     new_library(page, base_url)
