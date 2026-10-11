@@ -1,7 +1,8 @@
-// Use cases of step 2: check files, upload them one after another and follow each ingestion job.
+// Use cases of step 1: check files, send them one after another and follow each ingestion job.
 import { JOB_MAX_POLL_FAILURES, JOB_MAX_WAIT_MS, JOB_POLL_MS } from "../config.js";
-import { ApiError, errorMessage } from "../errors.js";
+import { ApiError } from "../errors.js";
 import { t } from "../i18n.js";
+import { rowStatusText } from "../selectors.js";
 import { sleep as defaultSleep } from "../timing.js";
 
 const MEGABYTE = 1024 * 1024;
@@ -28,18 +29,31 @@ export function createUploadActions({
 }) {
   let nextId = 1;
 
+  // Every change of a row is announced to screen readers through the live line of step 1.
+  function publish(uploads, row) {
+    store.set({
+      uploads,
+      documentsAnnouncement: t("documents.announce", {
+        name: row.name,
+        status: rowStatusText(row.phase, row.errorCode),
+      }),
+    });
+  }
+
   function addRow(row) {
-    store.set({ uploads: [...store.get().uploads, row] });
+    publish([...store.get().uploads, row], row);
   }
 
   function setRow(id, patch) {
-    const uploads = store.get().uploads.map((row) => (row.id === id ? { ...row, ...patch } : row));
-    store.set({ uploads });
+    const row = { ...store.get().uploads.find((item) => item.id === id), ...patch };
+    const uploads = store.get().uploads.map((item) => (item.id === id ? row : item));
+    publish(uploads, row);
   }
 
   // Polls the job until it is done or failed. Gives up after too many failed polls in a row, or
-  // when the job has run for longer than JOB_MAX_WAIT_MS, so the page never waits forever.
-  async function followJob(id, jobId) {
+  // when the job has run for longer than JOB_MAX_WAIT_MS, so the page never waits forever. The row
+  // does not change while the job runs: the server's stages are not shown one by one.
+  async function followJob(jobId) {
     const started = now();
     let failures = 0;
     while (now() - started <= JOB_MAX_WAIT_MS) {
@@ -47,7 +61,6 @@ export function createUploadActions({
         const job = await api.getJob(jobId);
         failures = 0;
         if (job.state === "done" || job.state === "failed") return job;
-        setRow(id, { phase: job.state });
       } catch (error) {
         if (!(error instanceof ApiError)) throw error;
         failures += 1;
@@ -67,7 +80,6 @@ export function createUploadActions({
       collectionId,
       name: file.name,
       phase: invalid ? "failed" : "sending",
-      percent: 0,
       errorCode: invalid,
     });
     if (invalid) return;
@@ -75,17 +87,18 @@ export function createUploadActions({
       const { job_id: jobId, document_id: documentId } = await api.uploadDocument(
         collectionId,
         file,
-        (loaded, total) => setRow(id, { percent: Math.round((100 * loaded) / total) }),
       );
-      const job = await followJob(id, jobId);
+      setRow(id, { phase: "preparing" });
+      const job = await followJob(jobId);
       if (job.state === "failed") {
         setRow(id, { phase: "failed", errorCode: job.error || "internal_error" });
         return;
       }
       // The server points a duplicate job at the document that already holds this content.
-      const duplicate = job.document_id !== documentId;
-      setRow(id, { phase: duplicate ? "duplicate" : "done" });
+      const phase = job.document_id !== documentId ? "duplicate" : "done";
+      // The list is reloaded while the row still reads "preparing": the file is never in neither.
       if (store.get().selectedCollectionId === collectionId) await documents.loadDocuments();
+      setRow(id, { phase });
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       setRow(id, { phase: "failed", errorCode: error.code });
@@ -93,10 +106,7 @@ export function createUploadActions({
   }
 
   async function uploadFiles(files) {
-    if (files.length === 0) {
-      store.set({ documentsMessage: { kind: "error", text: t("documents.noFiles") } });
-      return;
-    }
+    if (files.length === 0) return;
     store.set({ documentsMessage: null });
     // The whole batch goes to the collection that was selected when the files were chosen.
     const { selectedCollectionId: collectionId, capabilities } = store.get();

@@ -76,11 +76,18 @@ def test_every_error_code_of_the_api_has_a_turkish_message():
     assert missing == [] and "error.unknown" in keys
 
 
-def test_every_preset_has_a_turkish_description():
+def test_every_preset_is_offered_with_plain_copy_or_deliberately_hidden():
+    text = (FRONTEND / "js" / "methods.js").read_text(encoding="utf-8")
+    catalog = set(re.findall(r'preset: "([^"]+)"', text))
+    hidden_list = re.search(r"HIDDEN_PRESETS = Object\.freeze\(\[([^\]]*)\]\)", text)
+    assert hidden_list is not None
+    hidden = set(re.findall(r'"([^"]+)"', hidden_list.group(1)))
+    assert set(PRESETS) | {"paper"} == catalog | hidden
+    assert catalog & hidden == set()
     keys = _string_keys()
-    for name in [*PRESETS, "paper"]:
+    for key in re.findall(r'key: "([^"]+)"', text):
         for part in ("label", "summary", "note"):
-            assert f"method.{name}.{part}" in keys, f"method.{name}.{part}"
+            assert f"method.{key}.{part}" in keys, f"method.{key}.{part}"
 
 
 def test_scripts_never_build_html_from_text():
@@ -220,12 +227,18 @@ def test_reduced_motion_is_respected():
     assert "prefers-reduced-motion" in css
 
 
+def test_the_page_flow_is_in_reading_order():
+    page = _page()
+    ids = [a["id"] for tag, a in page.tags if tag in ("section", "details") and "id" in a]
+    assert ids[:4] == ["step-documents", "step-ask", "step-answer", "advanced"]
+    advanced = next(a for tag, a in page.tags if tag == "details" and a.get("id") == "advanced")
+    assert "open" not in advanced  # closed by default
+
+
 DYNAMIC_PREFIXES = (
     "error.",
     "method.",
-    "trace.stage.",
-    "trace.score.",
-    "upload.phase.",
+    "documents.status.",
     "system.chip.",
     "system.banner.",
     "result.notFound.tip",

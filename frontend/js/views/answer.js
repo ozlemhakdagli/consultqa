@@ -1,50 +1,73 @@
-// The answer card and the source cards. Citation markers are buttons that move focus to a source.
+// The answer card and its sources. A citation marker is a button that shows its source passage.
 import { el } from "../dom.js";
-import { formatSeconds } from "../format.js";
-import { has, t } from "../i18n.js";
+import { t } from "../i18n.js";
+import { methodKey } from "../methods.js";
 import { splitMarkers } from "../markers.js";
 
-function methodLabel(preset) {
-  return has(`method.${preset}.label`) ? `${t(`method.${preset}.label`)} (${preset})` : preset;
-}
-
-function focusSource(target, cards) {
-  for (const card of cards.values()) card.removeAttribute("data-active");
-  target.setAttribute("data-active", "true");
-  target.focus();
-  target.scrollIntoView({ block: "nearest" });
-}
-
-function sourceCard(citation, names) {
-  return el(
+// One source: where the passage came from, and a button that shows or hides the passage text.
+function sourceCard(citation, names, several) {
+  const id = `cite-${citation.number}`;
+  const passage = el("blockquote", {
+    class: "source-passage",
+    attrs: { id: `${id}-text` },
+    text: citation.text,
+  });
+  passage.hidden = true;
+  const toggle = el("button", {
+    class: "button button-secondary",
+    text: t("result.showPassage"),
+    attrs: { type: "button", "aria-controls": `${id}-text`, "aria-expanded": "false" },
+  });
+  const setOpen = (open) => {
+    passage.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = t(open ? "result.hidePassage" : "result.showPassage");
+  };
+  toggle.addEventListener("click", () => setOpen(passage.hidden));
+  const heading = several
+    ? [el("h4", { text: t("result.sourceHeading", { number: citation.number }) })]
+    : [];
+  const item = el(
     "li",
-    { class: "citation-card", attrs: { id: `cite-${citation.number}`, tabindex: -1 } },
-    el("h4", { text: t("result.sourceHeading", { number: citation.number }) }),
+    { class: "citation-card", attrs: { id, tabindex: -1 } },
+    ...heading,
     el("p", {
       class: "citation-meta",
-      text: t("result.sourceMeta", {
+      text: t("result.sourceDocument", {
         document: names.get(citation.doc_id) ?? t("result.unknownDocument"),
+      }),
+    }),
+    el("p", {
+      class: "citation-meta",
+      text: t("result.sourceSection", {
         section: citation.heading_path.join(" › ") || t("result.noSection"),
       }),
     }),
-    el("blockquote", { text: citation.text }),
+    toggle,
+    passage,
   );
+  return { item, open: setOpen };
+}
+
+// Marks one source as the active one, shows its passage and moves focus to it.
+function showSource(source, cards) {
+  for (const other of cards.values()) other.item.removeAttribute("data-active");
+  source.item.setAttribute("data-active", "true");
+  source.open(true);
+  source.item.focus();
+  source.item.scrollIntoView({ block: "nearest" });
 }
 
 function sourcesSection(citations, names, cards) {
+  const several = citations.length > 1;
   const list = el("ol", { class: "citation-list" });
   for (const citation of citations) {
-    const card = sourceCard(citation, names);
-    cards.set(citation.number, card);
-    list.append(card);
+    const source = sourceCard(citation, names, several);
+    cards.set(citation.number, source);
+    list.append(source.item);
   }
-  return el(
-    "section",
-    { class: "sources" },
-    el("h3", { text: t("result.sourcesTitle") }),
-    el("p", { class: "help", text: t("result.sourcesHelp") }),
-    list,
-  );
+  const title = t(several ? "result.sourceTitleMany" : "result.sourceTitleOne");
+  return el("section", { class: "sources" }, el("h3", { text: title }), list);
 }
 
 // A marker keeps only the numbers that have a source as buttons; anything else stays text.
@@ -53,14 +76,14 @@ function markerNodes(numbers, cards) {
   const nodes = ["["];
   numbers.forEach((number, index) => {
     if (index > 0) nodes.push(", ");
-    const card = cards.get(number);
+    const source = cards.get(number);
     nodes.push(
-      card
+      source
         ? el("button", {
             class: "marker",
             text: String(number),
             attrs: { type: "button", "aria-label": t("result.markerLabel", { number }) },
-            on: { click: () => focusSource(card, cards) },
+            on: { click: () => showSource(source, cards) },
           })
         : String(number),
     );
@@ -75,33 +98,37 @@ function answerNodes(answer, cards) {
   );
 }
 
-function noteText(result, citationCount) {
+function noteText(result) {
   if (result.usesLlm) return t("result.llmNote");
-  return citationCount > 0 ? t("result.extractiveNote") : null;
+  return result.citations.length > 0 ? t("result.extractiveNote") : null;
+}
+
+// The method is named only when it is not the recommended one, and then only by its plain label.
+function methodLine(result) {
+  const key = methodKey(result.preset);
+  if (result.isRecommended || key === null) return null;
+  return t("result.method", { method: t(`method.${key}.label`) });
 }
 
 function answerCard(result, cards) {
   const children = [
-    el("h3", { attrs: { id: "result-title", tabindex: -1 }, text: t("result.answerTitle") }),
-    el("p", { class: "answer-text" }, ...answerNodes(result.answer, cards)),
+    el(
+      "p",
+      { class: "answer-text", attrs: { id: "result-title", tabindex: -1 } },
+      ...answerNodes(result.answer, cards),
+    ),
   ];
-  const note = noteText(result, result.citations.length);
+  const note = noteText(result);
   if (note !== null) children.push(el("p", { class: "note", text: note }));
-  children.push(
-    el("p", {
-      class: "meta",
-      text: t("result.meta", {
-        method: methodLabel(result.preset),
-        seconds: formatSeconds(result.latencyMs),
-      }),
-    }),
-  );
+  const method = methodLine(result);
+  if (method !== null) children.push(el("p", { class: "meta", text: method }));
   return el("article", { class: "answer-card" }, ...children);
 }
 
 // Returns [answer card, sources section]; the sources section is null when there are no sources.
 export function renderAnswer(result, names) {
   const cards = new Map();
-  const sources = result.citations.length > 0 ? sourcesSection(result.citations, names, cards) : null;
+  const sources =
+    result.citations.length > 0 ? sourcesSection(result.citations, names, cards) : null;
   return [answerCard(result, cards), sources];
 }

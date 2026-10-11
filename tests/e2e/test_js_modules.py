@@ -17,7 +17,7 @@ def test_t_fills_placeholders_and_falls_back_to_the_key(page, base_url):
     """,
     )
     assert result == [
-        "“Kılavuzlar” koleksiyonu oluşturuldu. Şimdi 2. adımda belge yükleyebilirsiniz.",
+        "“Kılavuzlar” klasörü oluşturuldu ve seçildi.",
         "no.such.key",
         True,
         False,
@@ -40,7 +40,10 @@ def test_apply_static_text_sets_text_and_placeholders(page, base_url):
         return [heading.textContent, input.placeholder];
     """,
     )
-    assert result == ["Belge Soru-Cevap", "Örneğin: Bu belgede garanti süresi kaç yıl?"]
+    assert result == [
+        "Belge Soru-Cevap",
+        "Sorunuzu buraya yazın. Örneğin: Garanti süresi kaç yıldır?",
+    ]
 
 
 def test_el_never_parses_html_and_by_id_fails_loudly(page, base_url):
@@ -88,8 +91,8 @@ def test_error_message_maps_codes_and_falls_back(page, base_url):
     """,
     )
     assert result == [
-        "Bu adda bir koleksiyon zaten var. Başka bir ad yazın veya listeden onu seçin.",
-        "Beklenmeyen bir hata oluştu.",
+        "Bu adda bir klasör zaten var. Başka bir ad yazın ya da listeden o klasörü seçin.",
+        "Bir sorun oluştu. Lütfen tekrar deneyin.",
         "busy",
         429,
         True,
@@ -132,13 +135,12 @@ def test_format_helpers_use_turkish_conventions(page, base_url):
         base_url,
         """
         const f = await import('/js/format.js');
-        return [f.formatSeconds(420), f.formatSeconds(1234), f.formatScore(0.5),
-                f.formatMegabytes(20),
+        return [f.formatSeconds(420), f.formatSeconds(1234), f.formatMegabytes(20),
                 f.formatDateTime('2026-10-11T10:30:00+00:00').includes('2026'),
                 f.formatDateTime('not a date')];
     """,
     )
-    assert result == ["0,42", "1,23", "0,5000", "20", True, ""]
+    assert result == ["0,42", "1,23", "20", True, ""]
 
 
 def test_store_notifies_only_watchers_of_changed_keys(page, base_url):
@@ -248,42 +250,6 @@ def test_api_delete_accepts_an_empty_204(page, base_url):
     assert result == {}
 
 
-def test_block_reasons_follow_the_order_of_the_steps(page, base_url):
-    result = run_js(
-        page,
-        base_url,
-        """
-        const { askBlockReason, uploadBlockReason } = await import('/js/selectors.js');
-        const presets = [
-          { name: 'L2', available: true, reason: null, uses_llm: false },
-          { name: 'L4+llm', available: false, reason: 'llm_not_configured', uses_llm: true },
-        ];
-        const ok = { status: 'ready', selectedCollectionId: 'c', documents: [{ id: 'd' }],
-                     documentsLoaded: true, selectedPreset: 'L2', capabilities: { presets } };
-        return [
-          askBlockReason(ok),
-          askBlockReason({ ...ok, selectedCollectionId: '', status: 'loading' }),
-          askBlockReason({ ...ok, status: 'loading' }),
-          askBlockReason({ ...ok, documents: [] }),
-          askBlockReason({ ...ok, selectedPreset: 'L4+llm' }),
-          uploadBlockReason(ok),
-          uploadBlockReason({ ...ok, selectedCollectionId: '' }),
-          uploadBlockReason({ ...ok, status: 'loading' }),
-        ];
-    """,
-    )
-    assert result == [
-        None,
-        "Önce 1. adımda bir koleksiyon seçin.",
-        "Sistem hazır olana kadar soru sorulamaz. Sayfanın üstündeki durum bilgisine bakın.",
-        "Bu koleksiyonda belge yok. Önce 2. adımda en az bir belge yükleyin.",
-        "Seçili yöntem kullanılamıyor. Başka bir yöntem seçin.",
-        None,
-        "Önce 1. adımda bir koleksiyon seçin veya oluşturun.",
-        "Sistem hazır olana kadar belge yüklenemez. Sayfanın üstündeki durum bilgisine bakın.",
-    ]
-
-
 def test_pick_preset_and_document_names(page, base_url):
     result = run_js(
         page,
@@ -354,20 +320,94 @@ def test_create_collection_selects_it_and_reports_errors(page, base_url):
     )
     assert result == [
         False,
-        {"kind": "error", "text": "Lütfen koleksiyon için bir ad yazın."},
+        {"kind": "error", "text": "Lütfen klasör için bir ad yazın."},
         False,
         {
             "kind": "error",
-            "text": "Bu adda bir koleksiyon zaten var. Başka bir ad yazın veya listeden onu seçin.",
+            "text": "Bu adda bir klasör zaten var. Başka bir ad yazın ya da listeden o klasörü seçin.",
         },
         True,
         {
             "kind": "info",
-            "text": "“Yeni” koleksiyonu oluşturuldu. Şimdi 2. adımda belge yükleyebilirsiniz.",
+            "text": "“Yeni” klasörü oluşturuldu ve seçildi.",
         },
         "c9",
         ["c9"],
     ]
+
+
+def test_default_library_is_created_once_selected_and_never_duplicated(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        localStorage.clear();
+        const { createStore, INITIAL_STATE } = await import('/js/state.js');
+        const { createCollectionActions } = await import('/js/actions/collections.js');
+        const { ApiError } = await import('/js/errors.js');
+        const refuse = async () => { throw new Error('no create'); };
+        const setup = (lists, createImpl) => {
+          const created = [];
+          const api = {
+            listCollections: async () => (lists.length > 1 ? lists.shift() : lists[0]).map((c) => ({ ...c })),
+            createCollection: async (name) => { created.push(name); return createImpl(name); },
+          };
+          const store = createStore({ ...INITIAL_STATE });
+          const loaded = [];
+          const documents = { loadDocuments: async () => { loaded.push(store.get().selectedCollectionId); } };
+          return { store, created, loaded, actions: createCollectionActions({ api, store, documents }) };
+        };
+        const out = {};
+        // a. empty system: the default library is created once and selected
+        const a = setup([[], [{ id: 'n1', name: 'Belgelerim' }]], async (name) => ({ id: 'n1', name }));
+        await a.actions.loadCollections();
+        out.a = [a.created, a.store.get().selectedCollectionId, a.loaded, a.store.get().collections.length];
+        // b. it already exists: nothing is created
+        const two = [{ id: 'b1', name: 'Belgelerim' }, { id: 'x', name: 'Ürün' }];
+        const b = setup([two], refuse);
+        await b.actions.loadCollections();
+        out.b = [b.created, b.store.get().selectedCollectionId];
+        // c. a remembered folder wins while it exists; a vanished one falls back to the default
+        localStorage.setItem('docrag.collection', 'x');
+        const c = setup([two], refuse);
+        await c.actions.loadCollections();
+        const remembered = c.store.get().selectedCollectionId;
+        localStorage.setItem('docrag.collection', 'gone');
+        const c2 = setup([two], refuse);
+        await c2.actions.loadCollections();
+        out.c = [remembered, c2.store.get().selectedCollectionId];
+        localStorage.clear();
+        // d. another tab created it first (409): not an error, the existing one is used
+        const d = setup([[], [{ id: 'x1', name: 'Belgelerim' }]], async () => { throw new ApiError('collection_exists', 409, {}); });
+        await d.actions.loadCollections();
+        out.d = [d.created, d.store.get().selectedCollectionId, d.store.get().documentsMessage];
+        // e. the list cannot be read: shown in step 1, cleared by a later success
+        let fail = true;
+        const api = {
+          listCollections: async () => { if (fail) throw new ApiError('internal_error', 500, {}); return [{ id: 'b1', name: 'Belgelerim' }]; },
+          createCollection: refuse,
+        };
+        const store = createStore({ ...INITIAL_STATE });
+        const actions = createCollectionActions({ api, store, documents: { loadDocuments: async () => {} } });
+        await actions.loadCollections();
+        const failed = [store.get().selectedCollectionId, store.get().documentsMessage, store.get().collectionsLoaded];
+        fail = false;
+        await actions.loadCollections();
+        out.e = [failed, store.get().documentsMessage, store.get().selectedCollectionId];
+        return out;
+        """,
+    )
+    assert result == {
+        "a": [["Belgelerim"], "n1", ["n1"], 1],
+        "b": [[], "b1"],
+        "c": ["x", "b1"],
+        "d": [["Belgelerim"], "x1", None],
+        "e": [
+            ["", {"kind": "error", "text": "Bir sorun oluştu. Lütfen tekrar deneyin."}, False],
+            None,
+            "b1",
+        ],
+    }
 
 
 def test_documents_of_a_previous_collection_never_overwrite_the_current_one(page, base_url):
@@ -440,6 +480,84 @@ UPLOAD_SETUP = """
 """
 
 
+def test_api_upload_posts_a_form_with_the_file(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        API_SETUP
+        + """
+        const calls = [];
+        const fetchImpl = async (url, init) => {
+          calls.push([url, init.method, init.body instanceof FormData, init.body.get('file').name, init.headers ?? null]);
+          return { ok: true, status: 202, json: async () => ({ job_id: 'j1', document_id: 'd1' }) };
+        };
+        const body = await createApi({ fetchImpl }).uploadDocument('c 1', new File(['x'], 'a.md'));
+        return [calls, body];
+        """,
+    )
+    assert result == [
+        [["/api/collections/c%201/documents", "POST", True, "a.md", None]],
+        {"job_id": "j1", "document_id": "d1"},
+    ]
+
+
+def test_document_rows_put_unfinished_uploads_first_and_hide_finished_ones(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { documentRows } = await import('/js/selectors.js');
+        const state = {
+          selectedCollectionId: 'c1',
+          documents: [{ id: 'd1', filename: 'eski.md' }],
+          uploads: [
+            { id: 1, collectionId: 'c1', name: 'a.md', phase: 'sending', errorCode: null },
+            { id: 2, collectionId: 'c1', name: 'b.md', phase: 'done', errorCode: null },
+            { id: 3, collectionId: 'c2', name: 'baska.md', phase: 'preparing', errorCode: null },
+            { id: 4, collectionId: 'c1', name: 'c.md', phase: 'failed', errorCode: 'parse_failed' },
+          ],
+        };
+        return documentRows(state).map((row) => [row.key, row.name, row.status, row.errorCode]);
+        """,
+    )
+    assert result == [
+        ["upload-1", "a.md", "sending", None],
+        ["upload-4", "c.md", "failed", "parse_failed"],
+        ["doc-d1", "eski.md", "ready", None],
+    ]
+
+
+def test_row_status_texts_are_plain(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { rowStatusText } = await import('/js/selectors.js');
+        return [rowStatusText('sending'), rowStatusText('preparing'), rowStatusText('ready'),
+                rowStatusText('duplicate'), rowStatusText('failed', 'parse_failed')];
+        """,
+    )
+    assert result == [
+        "Yükleniyor…",
+        "Hazırlanıyor…",
+        "Kullanıma hazır",
+        "Bu belge zaten ekli; yeniden eklenmedi.",
+        "Okunamadı: Dosya açılamadı. Bozuk ya da şifreli olabilir.",
+    ]
+
+
+def test_file_types_are_shown_as_plain_names(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { formatFileTypes } = await import('/js/format.js');
+        return formatFileTypes(['.md', '.pdf', '.txt']);
+        """,
+    )
+    assert result == "MD, PDF, TXT"
+
+
 def test_upload_runs_through_the_job_states_and_reloads_documents(page, base_url):
     result = run_js(
         page,
@@ -448,47 +566,28 @@ def test_upload_runs_through_the_job_states_and_reloads_documents(page, base_url
         + """
         const states = ['queued', 'parsing', 'embedding', 'graph', 'done'];
         const api = {
-          uploadDocument: async (cid, file, onProgress) => { onProgress(50, 100); return { job_id: 'j1', document_id: 'd1' }; },
+          uploadDocument: async () => ({ job_id: 'j1', document_id: 'd1' }),
           getJob: async () => ({ state: states.shift(), error: null, document_id: 'd1' }),
         };
-        const { store, actions, reloads } = make(api);
+        const store = createStore({ ...INITIAL_STATE, status: 'ready', selectedCollectionId: 'c1', capabilities: caps });
+        const reloads = [];
+        // The row must still read "preparing" while the list reloads, so the file is in one list.
+        const documents = { loadDocuments: async () => { reloads.push([store.get().selectedCollectionId, store.get().uploads[0].phase]); } };
+        const actions = createUploadActions({ api, store, documents, sleep: async () => {} });
         const phases = [];
-        const percents = [];
         store.subscribe((s) => {
           const phase = s.uploads.map((r) => r.phase).join(',');
           if (phases.at(-1) !== phase) phases.push(phase);
-          if (s.uploads[0]) percents.push(s.uploads[0].percent);
         }, ['uploads']);
         await actions.uploadFiles([new File(['x'], 'a.md')]);
-        return [phases, percents.includes(50), store.get().uploads[0].name, reloads];
-    """,
+        return [phases, reloads, store.get().documentsAnnouncement];
+        """,
     )
     assert result == [
-        ["", "sending", "queued", "parsing", "embedding", "graph", "done"],
-        True,
-        "a.md",
-        ["c1"],
+        ["", "sending", "preparing", "done"],
+        [["c1", "preparing"]],
+        "a.md: Kullanıma hazır",
     ]
-
-
-def test_upload_reports_a_duplicate_and_a_server_failure(page, base_url):
-    result = run_js(
-        page,
-        base_url,
-        UPLOAD_SETUP
-        + """
-        const jobs = [{ state: 'done', error: null, document_id: 'other' },
-                      { state: 'failed', error: 'parse_failed', document_id: 'd1' }];
-        const api = {
-          uploadDocument: async () => ({ job_id: 'j', document_id: 'd1' }),
-          getJob: async () => jobs.shift(),
-        };
-        const { store, actions, reloads } = make(api);
-        await actions.uploadFiles([new File(['x'], 'a.md'), new File(['y'], 'b.md')]);
-        return [rowOf(store), reloads];
-    """,
-    )
-    assert result == [[["duplicate", None], ["failed", "parse_failed"]], ["c1"]]
 
 
 def test_upload_refuses_bad_files_before_sending(page, base_url):
@@ -511,8 +610,66 @@ def test_upload_refuses_bad_files_before_sending(page, base_url):
     assert result == [
         [["failed", "unsupported_type"], ["failed", "file_empty"], ["failed", "file_too_large"]],
         0,
-        {"kind": "error", "text": "Lütfen yüklenecek en az bir dosya seçin."},
+        None,
     ]
+
+
+def test_block_reasons_follow_the_order_of_the_steps(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { askBlockReason, uploadBlockReason } = await import('/js/selectors.js');
+        const presets = [
+          { name: 'L2', available: true, reason: null, uses_llm: false },
+          { name: 'L4+llm', available: false, reason: 'llm_not_configured', uses_llm: true },
+        ];
+        const ok = { status: 'ready', selectedCollectionId: 'c', documents: [{ id: 'd' }],
+                     documentsLoaded: true, selectedPreset: 'L2', capabilities: { presets }, uploads: [] };
+        return [
+          askBlockReason(ok),
+          askBlockReason({ ...ok, selectedCollectionId: '', status: 'loading' }),
+          askBlockReason({ ...ok, status: 'loading' }),
+          askBlockReason({ ...ok, documents: [] }),
+          askBlockReason({ ...ok, selectedPreset: 'L4+llm' }),
+          askBlockReason({ ...ok, documents: [], uploads: [{ collectionId: 'c', phase: 'preparing' }] }),
+          uploadBlockReason(ok),
+          uploadBlockReason({ ...ok, selectedCollectionId: '' }),
+          uploadBlockReason({ ...ok, status: 'loading' }),
+        ];
+    """,
+    )
+    assert result == [
+        None,
+        "Belge alanı henüz hazır değil. Birkaç saniye bekleyin; olmazsa sayfayı yenileyin.",
+        "Sistem açılırken soru sorulamaz. Birkaç dakika bekleyin.",
+        "Soru sormak için önce bir belge ekleyin.",
+        "Seçtiğiniz yöntem şu anda kullanılamıyor. Gelişmiş seçeneklerden başka bir yöntem seçin.",
+        "Belgeniz hazırlanıyor. Hazır olunca soru sorabilirsiniz.",
+        None,
+        "Belge alanı henüz hazır değil. Birkaç saniye bekleyin; olmazsa sayfayı yenileyin.",
+        "Sistem açılırken belge eklenemez. Birkaç dakika bekleyin.",
+    ]
+
+
+def test_upload_reports_a_duplicate_and_a_server_failure(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        UPLOAD_SETUP
+        + """
+        const jobs = [{ state: 'done', error: null, document_id: 'other' },
+                      { state: 'failed', error: 'parse_failed', document_id: 'd1' }];
+        const api = {
+          uploadDocument: async () => ({ job_id: 'j', document_id: 'd1' }),
+          getJob: async () => jobs.shift(),
+        };
+        const { store, actions, reloads } = make(api);
+        await actions.uploadFiles([new File(['x'], 'a.md'), new File(['y'], 'b.md')]);
+        return [rowOf(store), reloads];
+    """,
+    )
+    assert result == [[["duplicate", None], ["failed", "parse_failed"]], ["c1"]]
 
 
 def test_upload_turns_an_api_error_into_a_failed_row(page, base_url):
@@ -604,7 +761,8 @@ ASK_SETUP = """
                      { name: 'L4+llm', available: true, reason: null, uses_llm: true }];
     const make = (api) => {
       const store = createStore({ ...INITIAL_STATE, status: 'ready', selectedCollectionId: 'c1',
-        selectedPreset: 'L2', documentsLoaded: true, documents: [{ id: 'd' }], capabilities: { presets } });
+        selectedPreset: 'L2', documentsLoaded: true, documents: [{ id: 'd' }],
+        capabilities: { presets, default_preset: 'L2' } });
       return { store, actions: createAskActions({ api, store }) };
     };
 """
@@ -628,19 +786,19 @@ def test_ask_stores_an_answer_a_not_found_and_an_error(page, base_url):
         const out = [];
         actions.selectPreset('L4+llm');
         await actions.askQuestion('  Soru bir?  ');
-        out.push(store.get().result.kind, store.get().result.usesLlm, store.get().result.latencyMs);
+        out.push(store.get().result.kind, store.get().result.usesLlm, store.get().result.isRecommended);
         actions.selectPreset('L2');
         await actions.askQuestion('Soru iki?');
         out.push(store.get().result.kind);
         await actions.askQuestion('Soru üç?');
-        out.push(store.get().result.kind, store.get().result.code, store.get().result.trace.length);
+        out.push(store.get().result.kind, store.get().result.code);
         await actions.askQuestion('Soru dört?');
-        out.push(store.get().result.code, store.get().result.trace.length, store.get().asking);
+        out.push(store.get().result.code, store.get().asking);
         return [out, calls[0]];
     """,
     )
     assert result == [
-        ["answer", True, 420, "notFound", "error", "llm_unavailable", 1, "busy", 0, False],
+        ["answer", True, False, "notFound", "error", "llm_unavailable", "busy", False],
         ["c1", "Soru bir?", "L4+llm"],
     ]
 
@@ -658,11 +816,43 @@ def test_ask_ignores_a_blank_question_and_a_second_call_while_asking(page, base_
         const { store, actions } = make(api);
         await actions.askQuestion('   ');
         const message = store.get().askMessage;
+        actions.clearMessage();
+        const cleared = store.get().askMessage;
         const first = actions.askQuestion('Soru?');
         await actions.askQuestion('Soru?');
         release();
         await first;
-        return [message, calls];
+        return [message, calls, cleared];
     """,
     )
-    assert result == ["Lütfen bir soru yazın.", 1]
+    assert result == ["Lütfen bir soru yazın.", 1, ""]
+
+
+def test_offered_methods_follow_the_catalog_and_hide_unknown_presets(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { offeredMethods, methodKey } = await import('/js/methods.js');
+        const preset = (name, available = true, reason = null) =>
+          ({ name, available, reason, uses_llm: name.includes('llm') });
+        const caps = { default_preset: 'L2', presets: [
+          preset('L2'), preset('L3'), preset('L4'), preset('L5'),
+          preset('L4+llm', false, 'llm_not_configured'),
+          preset('L5+llm', false, 'llm_not_configured'), preset('L9') ] };
+        return [offeredMethods(caps).map((m) => [m.key, m.available, m.recommended, m.reason]),
+                offeredMethods(null), methodKey('L4+llm'), methodKey('L5+llm')];
+        """,
+    )
+    assert result == [
+        [
+            ["fast", True, True, None],
+            ["recheck", True, False, None],
+            ["headings", True, False, None],
+            ["related", True, False, None],
+            ["ai", False, False, "llm_not_configured"],
+        ],
+        [],
+        "ai",
+        None,
+    ]

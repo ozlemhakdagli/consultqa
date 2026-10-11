@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -50,15 +51,14 @@ def browser(playwright_driver: Playwright) -> Iterator[Browser]:
     launched.close()
 
 
-@pytest.fixture(scope="session")
-def base_url(
-    playwright_driver: Playwright, tmp_path_factory: pytest.TempPathFactory
-) -> Iterator[str]:
-    """A stub-backend server on a free port. Readiness is polled through Playwright's HTTP client,
-    because the repository's block_network fixture stops Python sockets from connecting."""
+@contextmanager
+def _running_server(driver: Playwright, state_dir: Path) -> Iterator[str]:
+    """A stub-backend server on a free port with its own state directory, polled until ready.
+    Readiness is polled through Playwright's HTTP client, because the repository's block_network
+    fixture stops Python sockets from connecting."""
     from playwright.sync_api import Error as PlaywrightError
 
-    state_dir = tmp_path_factory.mktemp("docrag-state")
+    state_dir.mkdir(parents=True, exist_ok=True)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -78,7 +78,7 @@ def base_url(
     with log_path.open("w") as log:
         process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=log)  # noqa: S603
         url = f"http://127.0.0.1:{port}"
-        client = playwright_driver.request.new_context()
+        client = driver.request.new_context()
         try:
             for _ in range(120):
                 try:
@@ -96,6 +96,22 @@ def base_url(
             client.dispose()
             process.terminate()
             process.wait(timeout=10)
+
+
+@pytest.fixture(scope="session")
+def base_url(
+    playwright_driver: Playwright, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[str]:
+    """One stub-backend server shared by the tests of the session."""
+    with _running_server(playwright_driver, tmp_path_factory.mktemp("docrag-state")) as url:
+        yield url
+
+
+@pytest.fixture
+def fresh_server(playwright_driver: Playwright, tmp_path: Path) -> Iterator[str]:
+    """A stub-backend server with an empty state, for the first-visit tests."""
+    with _running_server(playwright_driver, tmp_path / "state") as url:
+        yield url
 
 
 @pytest.fixture

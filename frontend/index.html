@@ -24,12 +24,55 @@
       <p id="system-chip" class="chip" role="status" hidden></p>
     </header>
     <p id="system-banner" class="banner banner-warn" hidden></p>
-
-    <main class="layout">
-      <div class="column">
-        <section id="step-collection" class="card" aria-labelledby="step-collection-title">
-          <h2 id="step-collection-title"><span class="step-number">1</span> <span data-text="collection.title"></span></h2>
-          <p class="help" data-text="collection.help"></p>
+    <main class="steps">
+      <section id="step-documents" class="card" aria-labelledby="step-documents-title">
+        <h2 id="step-documents-title"><span class="step-number">1</span> <span data-text="documents.title"></span></h2>
+        <p class="help" data-text="documents.help"></p>
+        <div id="dropzone" class="dropzone">
+          <p class="dropzone-title" data-text="documents.drop"></p>
+          <p class="dropzone-or" data-text="documents.or"></p>
+          <label for="upload-files" class="button dropzone-button" data-text="documents.choose"></label>
+          <input id="upload-files" class="sr-only" type="file" multiple aria-describedby="upload-hint upload-reason">
+        </div>
+        <p id="upload-hint" class="help"></p>
+        <p id="upload-reason" class="reason" hidden></p>
+        <h3 id="documents-title" hidden></h3>
+        <p id="documents-empty" class="help" hidden></p>
+        <ul id="document-list" class="doc-list"></ul>
+        <p id="documents-live" class="sr-only" role="status"></p>
+        <p id="documents-message" class="message" aria-live="polite" hidden></p>
+      </section>
+      <section id="step-ask" class="card" aria-labelledby="step-ask-title">
+        <h2 id="step-ask-title"><span class="step-number">2</span> <span data-text="ask.title"></span></h2>
+        <p class="help" data-text="ask.help"></p>
+        <form id="ask-form" class="form" novalidate>
+          <label for="question" class="sr-only" data-text="ask.questionLabel"></label>
+          <textarea id="question" rows="4" maxlength="500" data-placeholder="ask.questionPlaceholder" aria-describedby="ask-message"></textarea>
+          <div class="examples" role="group" aria-labelledby="examples-title">
+            <p id="examples-title" class="help" data-text="ask.examplesTitle"></p>
+            <div id="example-list" class="example-list"></div>
+          </div>
+          <p id="ask-message" class="message message-error" role="alert" hidden></p>
+          <p id="ask-reason" class="reason" hidden></p>
+          <button id="ask-submit" type="submit" class="button button-large" data-text="ask.submit"></button>
+        </form>
+      </section>
+      <section id="step-answer" class="card" aria-labelledby="step-answer-title">
+        <h2 id="step-answer-title"><span class="step-number">3</span> <span data-text="answer.title"></span></h2>
+        <p id="result-empty" class="help" data-text="answer.empty"></p>
+        <div id="result" class="result"></div>
+      </section>
+      <details id="advanced" class="card advanced">
+        <summary data-text="advanced.title"></summary>
+        <p class="help" data-text="advanced.help"></p>
+        <fieldset id="method-fieldset" class="methods">
+          <legend data-text="advanced.methodLegend"></legend>
+          <p class="help" data-text="advanced.methodHelp"></p>
+          <div id="method-list"></div>
+        </fieldset>
+        <section class="folders" aria-labelledby="folder-title">
+          <h3 id="folder-title" data-text="advanced.folderTitle"></h3>
+          <p class="help" data-text="advanced.folderHelp"></p>
           <label for="collection-select" data-text="collection.selectLabel"></label>
           <select id="collection-select"></select>
           <form id="collection-form" class="form" novalidate>
@@ -40,45 +83,7 @@
           </form>
           <p id="collection-message" class="message" aria-live="polite" hidden></p>
         </section>
-
-        <section id="step-documents" class="card" aria-labelledby="step-documents-title">
-          <h2 id="step-documents-title"><span class="step-number">2</span> <span data-text="documents.title"></span></h2>
-          <p class="help" data-text="documents.help"></p>
-          <form id="upload-form" class="form" novalidate>
-            <label for="upload-files" data-text="documents.fileLabel"></label>
-            <input id="upload-files" type="file" multiple aria-describedby="upload-hint upload-reason">
-            <p id="upload-hint" class="help"></p>
-            <p id="upload-reason" class="reason" hidden></p>
-            <button id="upload-submit" type="submit" class="button" data-text="documents.upload"></button>
-          </form>
-          <ul id="upload-list" class="upload-list" aria-live="polite"></ul>
-          <h3 id="documents-title" hidden></h3>
-          <p id="documents-empty" class="help" hidden></p>
-          <ul id="document-list" class="doc-list"></ul>
-          <p id="documents-message" class="message" aria-live="polite" hidden></p>
-        </section>
-      </div>
-
-      <div class="column">
-        <section id="step-ask" class="card" aria-labelledby="step-ask-title">
-          <h2 id="step-ask-title"><span class="step-number">3</span> <span data-text="ask.title"></span></h2>
-          <p class="help" data-text="ask.help"></p>
-          <form id="ask-form" class="form" novalidate>
-            <label for="question" data-text="ask.questionLabel"></label>
-            <textarea id="question" rows="3" maxlength="500" data-placeholder="ask.questionPlaceholder" aria-describedby="question-help ask-message"></textarea>
-            <p id="question-help" class="help" data-text="ask.questionHelp"></p>
-            <p id="ask-message" class="message message-error" role="alert" hidden></p>
-            <fieldset id="method-fieldset" class="methods">
-              <legend data-text="ask.methodLegend"></legend>
-              <p class="help" data-text="ask.methodHelp"></p>
-              <div id="method-list"></div>
-            </fieldset>
-            <p id="ask-reason" class="reason" hidden></p>
-            <button id="ask-submit" type="submit" class="button" data-text="ask.submit"></button>
-          </form>
-          <div id="result" class="result"></div>
-        </section>
-      </div>
+      </details>
     </main>
   </div>
 </body>

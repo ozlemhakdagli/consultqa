@@ -1,11 +1,11 @@
-// Step 1 view: the collection list, the form that creates one, and the message line of the step.
+// Folder view: the folder list, the form that creates one, and the message line of that form.
 import { el, byId, showMessage } from "../dom.js";
 import { t } from "../i18n.js";
 
-function renderOptions(select, { collections, collectionsLoaded }) {
-  const empty = collectionsLoaded && collections.length === 0;
+function renderOptions(select, { collections }) {
+  const empty = collections.length === 0;
   const options = empty
-    ? [el("option", { attrs: { value: "" }, text: t("collection.empty") })]
+    ? [el("option", { attrs: { value: "" }, text: t("collection.loading") })]
     : collections.map((collection) =>
         el("option", { attrs: { value: collection.id }, text: collection.name }),
       );
@@ -19,7 +19,7 @@ export function mountCollectionsView(store, actions) {
   const input = byId("collection-name");
   const message = byId("collection-message");
 
-  store.subscribe((state) => renderOptions(select, state), ["collections", "collectionsLoaded"]);
+  store.subscribe((state) => renderOptions(select, state), ["collections"]);
   store.subscribe(
     (state) => {
       select.value = state.selectedCollectionId;

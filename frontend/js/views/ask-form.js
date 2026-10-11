@@ -1,7 +1,10 @@
-// Step 3 question form: the text box, the submit button, and the reason the form is locked.
-import { byId, setVisible, showMessage } from "../dom.js";
+// Step 2 question form: the text box, three example questions that fill it, the submit button, and
+// the reason the form is locked.
+import { byId, el, setVisible, showMessage } from "../dom.js";
 import { t } from "../i18n.js";
 import { askBlockReason } from "../selectors.js";
+
+const EXAMPLE_KEYS = ["ask.example.1", "ask.example.2", "ask.example.3"];
 
 export function mountAskView(store, actions) {
   const form = byId("ask-form");
@@ -9,6 +12,26 @@ export function mountAskView(store, actions) {
   const submit = byId("ask-submit");
   const reason = byId("ask-reason");
   const message = byId("ask-message");
+  const examples = byId("example-list");
+
+  // An example fills the box but never asks: the user decides when a question is sent.
+  for (const key of EXAMPLE_KEYS) {
+    examples.append(
+      el("button", {
+        class: "example-button",
+        text: t(key),
+        attrs: { type: "button" },
+        on: {
+          click: () => {
+            question.value = t(key);
+            actions.ask.clearMessage();
+            question.focus();
+          },
+        },
+      }),
+    );
+  }
+  question.addEventListener("input", () => actions.ask.clearMessage());
 
   store.subscribe(
     (state) => {
@@ -23,6 +46,7 @@ export function mountAskView(store, actions) {
       "selectedCollectionId",
       "documents",
       "documentsLoaded",
+      "uploads",
       "selectedPreset",
       "capabilities",
       "asking",

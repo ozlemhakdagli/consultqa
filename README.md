@@ -31,7 +31,7 @@ DOCRAG_BACKEND=real docker compose up -d --wait app
 
 Without a cache, `docker compose --profile setup run --rm fetch-models` downloads the same revisions into the volume first (about 9 GB). If the copy is missing a model, fetch only that model with the same command.
 
-The web page at `http://127.0.0.1:8000/` is in Turkish and has three numbered steps: choose or create a collection; upload documents and follow each upload until it is ready, with the list of documents and deletion; ask a question with a choice of method and read the answer with its source passages. Methods that need an LLM stay disabled, with the reason shown, until `DOCRAG_LLM_BASE_URL` and `DOCRAG_LLM_MODEL` are set. The same steps through the API, all under `/api`:
+The web page at `http://127.0.0.1:8000/` is in Turkish and shows three steps on one screen: add documents (a drop area; every document shows a plain status and can be deleted), write a question (with example questions), and read the answer with its source (the document and section name, and a button that shows the source text). It keeps the documents in one default folder, "Belgelerim", that it creates on the first visit. One answer mode ("Hızlı ve doğru", the API preset `L2`) is used by default; the other modes and extra document folders are under "Gelişmiş seçenekler", closed by default. The mode that needs an LLM stays disabled, with the reason shown, until `DOCRAG_LLM_BASE_URL` and `DOCRAG_LLM_MODEL` are set. The page does not show the retrieval trace; the API still returns it. The same steps through the API, all under `/api`:
 
 ```bash
 # 1. Create a collection; the response holds its id

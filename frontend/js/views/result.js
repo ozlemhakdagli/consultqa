@@ -1,10 +1,10 @@
-// Step 3 result area: a loading line, then the answer cards, the not-found card or the error card.
-import { el, byId } from "../dom.js";
+// Step 3 result area: a loading line, then the answer card with its sources, the not-found card or
+// the error card. The hint line shows while nothing has been asked yet.
+import { el, byId, setVisible } from "../dom.js";
 import { errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
 import { documentNames } from "../selectors.js";
 import { renderAnswer } from "./answer.js";
-import { renderTrace } from "./trace.js";
 
 function notFoundCard() {
   return el(
@@ -17,32 +17,33 @@ function notFoundCard() {
       {},
       el("li", { text: t("result.notFound.tip1") }),
       el("li", { text: t("result.notFound.tip2") }),
-      el("li", { text: t("result.notFound.tip3") }),
     ),
   );
 }
 
+// The card always says the same title; the specific sentence follows only when it is different.
 function errorCard(result) {
-  return el(
-    "article",
-    { class: "error-card", attrs: { role: "alert" } },
-    el("h3", { attrs: { id: "result-title", tabindex: -1 }, text: t("result.error.title") }),
-    el("p", { text: errorMessage(result.code) }),
-  );
+  const title = t("result.error.title");
+  const detail = errorMessage(result.code);
+  const children = [el("h3", { attrs: { id: "result-title", tabindex: -1 }, text: title })];
+  if (detail !== title) children.push(el("p", { class: "error-detail", text: detail }));
+  return el("article", { class: "error-card", attrs: { role: "alert" } }, ...children);
 }
 
 function renderResult(result, names) {
-  if (result.kind === "answer") return [...renderAnswer(result, names), renderTrace(result.trace)];
-  if (result.kind === "notFound") return [notFoundCard(), renderTrace(result.trace)];
-  return [errorCard(result), renderTrace(result.trace)];
+  if (result.kind === "answer") return renderAnswer(result, names);
+  if (result.kind === "notFound") return [notFoundCard()];
+  return [errorCard(result)];
 }
 
 export function mountResultView(store) {
   const container = byId("result");
+  const empty = byId("result-empty");
   let shown = null;
 
   store.subscribe(
     (state) => {
+      setVisible(empty, !state.asking && !state.result);
       container.setAttribute("aria-busy", String(state.asking));
       if (state.asking) {
         container.replaceChildren(

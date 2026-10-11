@@ -10,6 +10,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 1.3rem;
 }
 
 .step-number {
@@ -31,7 +32,7 @@
 
 .help {
   margin-top: 4px;
-  font-size: 0.92rem;
+  font-size: 1rem;
 }
 
 .chip {
@@ -97,47 +98,10 @@
   background: var(--error-bg);
 }
 
-.upload-list,
 .doc-list {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-.upload-row {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  margin-top: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.upload-row[data-phase="done"] {
-  border-color: var(--ok);
-}
-
-.upload-row[data-phase="failed"] {
-  border-color: var(--error);
-}
-
-.upload-row[data-phase="duplicate"] {
-  border-color: var(--info);
-}
-
-.upload-row .button {
-  width: auto;
-  justify-self: start;
-}
-
-.upload-name {
-  font-weight: 700;
-}
-
-.upload-status,
-.upload-percent {
-  color: var(--muted);
 }
 
 progress {
@@ -145,29 +109,107 @@ progress {
   height: 12px;
 }
 
-.doc-row {
+.dropzone {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  justify-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  text-align: center;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--field);
 }
 
-.doc-name {
-  grid-column: 1;
+.dropzone.is-dragging {
+  border-color: var(--accent);
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.dropzone[data-disabled="true"] .dropzone-button {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dropzone:focus-within .dropzone-button {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dropzone-title {
+  margin: 0;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 
-.doc-date {
-  grid-column: 1;
+.dropzone-or {
+  margin: 0;
   color: var(--muted);
+}
+
+.dropzone-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 24px;
+  cursor: pointer;
+}
+
+/* A phone has no drag and drop: the button alone carries the step. */
+@media (hover: none) and (pointer: coarse) {
+  .dropzone-title,
+  .dropzone-or {
+    display: none;
+  }
+}
+
+.doc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.doc-name {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.doc-status,
+.doc-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.doc-note {
   font-size: 0.9rem;
 }
 
-.doc-row > .button {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+.doc-row[data-status="ready"] .doc-status {
+  color: var(--ok);
+}
+
+.doc-row[data-status="failed"] .doc-status {
+  color: var(--error);
+}
+
+.doc-row progress {
+  height: 10px;
+}
+
+.doc-row .button {
   width: auto;
 }
 
@@ -189,6 +231,10 @@ progress {
   margin: 12px 0 0;
   padding: 0;
   border: 0;
+}
+
+.advanced .methods {
+  margin-top: 8px;
 }
 
 legend {
@@ -226,12 +272,6 @@ legend {
   margin: 0;
   font-weight: 700;
   cursor: pointer;
-}
-
-.method-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .badge {
@@ -287,7 +327,7 @@ legend {
 }
 
 .answer-text {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   white-space: pre-line;
 }
 
@@ -332,11 +372,20 @@ legend {
   outline: 2px solid var(--accent);
 }
 
-.citation-card blockquote {
+.citation-card .button {
+  width: auto;
+  margin-top: 8px;
+}
+
+.source-passage {
   margin: 8px 0 0;
   padding-left: 12px;
   border-left: 3px solid var(--accent);
   white-space: pre-line;
+}
+
+.error-detail {
+  margin: 4px 0 0;
 }
 
 .citation-meta {
@@ -344,24 +393,49 @@ legend {
   font-size: 0.9rem;
 }
 
-.trace {
+.advanced > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.advanced[open] > summary {
+  margin-bottom: 8px;
+}
+
+.folders {
   margin-top: 16px;
 }
 
-.trace table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
+#question {
+  min-height: 120px;
+  font-size: 1.1rem;
 }
 
-.trace th,
-.trace td {
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
+.examples {
+  margin-top: 4px;
 }
 
-.trace .table-wrap {
-  overflow-x: auto;
+.example-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.example-button {
+  width: auto;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.button-large {
+  min-height: 52px;
+  font-size: 1.1rem;
 }

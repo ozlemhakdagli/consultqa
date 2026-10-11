@@ -12,6 +12,7 @@ export const INITIAL_STATE = Object.freeze({
   documentsMessage: null,
   confirmDeleteId: "",
   uploads: [],
+  documentsAnnouncement: "",
   selectedPreset: "",
   asking: false,
   askMessage: "",

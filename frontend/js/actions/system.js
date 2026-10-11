@@ -1,7 +1,6 @@
 // Use cases of the readiness check: what the page may offer and when the models are ready.
 import { READY_POLL_MS } from "../config.js";
 import { ApiError } from "../errors.js";
-import { getPref } from "../prefs.js";
 import { isPresetAvailable, pickPreset } from "../selectors.js";
 import { sleep as defaultSleep } from "../timing.js";
 
@@ -14,7 +13,7 @@ export function createSystemActions({ api, store, sleep = defaultSleep }) {
         status: capabilities.ready ? "ready" : "loading",
       };
       if (!isPresetAvailable(capabilities, store.get().selectedPreset)) {
-        patch.selectedPreset = pickPreset(capabilities, getPref("preset"));
+        patch.selectedPreset = pickPreset(capabilities, "");
       }
       store.set(patch);
     } catch (error) {

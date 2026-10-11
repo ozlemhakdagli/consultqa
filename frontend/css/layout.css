@@ -1,5 +1,5 @@
 .page {
-  max-width: 72rem;
+  max-width: 44rem;
   margin: 0 auto;
   padding: 0 16px 32px;
 }
@@ -13,24 +13,10 @@
   padding: 16px 0;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-@media (min-width: 60rem) {
-  .layout {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    align-items: start;
-  }
-}
-
-.column {
+.steps {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-width: 0;
 }
 
 .form {
@@ -38,4 +24,19 @@
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* A phone keeps the same single column, with a little less room around each step. */
+@media (max-width: 30rem) {
+  .page {
+    padding: 0 12px 24px;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  .button-large {
+    width: 100%;
+  }
 }

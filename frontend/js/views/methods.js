@@ -1,68 +1,64 @@
-// Step 3 method list: one radio card per method, with its description and, when unavailable, why.
+// Advanced section: one radio card per offered method, with its plain name, its description and,
+// when the method cannot be used, the plain reason.
 import { byId, el } from "../dom.js";
 import { has, t } from "../i18n.js";
+import { offeredMethods } from "../methods.js";
 
-function textOr(key, fallback) {
-  return has(key) ? t(key) : fallback;
+function reasonText(reason) {
+  const key = `method.reason.${reason}`;
+  return t(has(key) ? key : "method.reason.unknown");
 }
 
-function methodOption(preset, index, capabilities, actions) {
-  const { name } = preset;
+function methodOption(method, index, actions) {
   const radioId = `method-radio-${index}`;
   const titleId = `method-title-${index}`;
   const summaryId = `method-summary-${index}`;
   const reasonId = `method-reason-${index}`;
-  const describedBy = preset.available ? summaryId : `${summaryId} ${reasonId}`;
+  const describedBy = method.available ? summaryId : `${summaryId} ${reasonId}`;
 
   const radio = el("input", {
     attrs: {
       type: "radio",
       name: "preset",
       id: radioId,
-      value: name,
+      value: method.preset,
       "aria-labelledby": titleId,
       "aria-describedby": describedBy,
     },
-    on: { change: () => actions.ask.selectPreset(name) },
+    on: { change: () => actions.ask.selectPreset(method.preset) },
   });
-  radio.disabled = !preset.available;
-
-  const badges = el("div", { class: "method-badges" }, el("span", { class: "badge", text: name }));
-  if (capabilities.default_preset === name) {
-    badges.append(el("span", { class: "badge badge-recommended", text: t("method.recommended") }));
-  }
-  if (preset.uses_llm) {
-    badges.append(el("span", { class: "badge", text: t("method.needsLlm") }));
-  }
+  radio.disabled = !method.available;
 
   const body = [
     el("label", {
       class: "method-title",
       attrs: { id: titleId, for: radioId },
-      text: textOr(`method.${name}.label`, name),
+      text: t(`method.${method.key}.label`),
     }),
-    badges,
+  ];
+  if (method.recommended) {
+    body.push(el("span", { class: "badge badge-recommended", text: t("method.recommended") }));
+  }
+  body.push(
     el("p", {
       class: "method-summary",
       attrs: { id: summaryId },
-      text: textOr(`method.${name}.summary`, t("method.unknown.summary")),
+      text: t(`method.${method.key}.summary`),
     }),
-  ];
-  if (has(`method.${name}.note`)) {
-    body.push(el("p", { class: "method-note", text: t(`method.${name}.note`) }));
-  }
-  if (!preset.available) {
+    el("p", { class: "method-note", text: t(`method.${method.key}.note`) }),
+  );
+  if (!method.available) {
     body.push(
       el("p", {
         class: "reason",
         attrs: { id: reasonId },
-        text: textOr(`method.reason.${preset.reason}`, t("method.reason.unknown")),
+        text: reasonText(method.reason),
       }),
     );
   }
   return el(
     "div",
-    { class: "method-option", attrs: { "data-available": String(preset.available) } },
+    { class: "method-option", attrs: { "data-available": String(method.available) } },
     radio,
     el("div", { class: "method-body" }, ...body),
   );
@@ -71,15 +67,16 @@ function methodOption(preset, index, capabilities, actions) {
 export function mountMethodsView(store, actions) {
   const list = byId("method-list");
 
-  store.subscribe((state) => {
-    const { capabilities } = state;
-    if (!capabilities) return;
-    list.replaceChildren(
-      ...capabilities.presets.map((preset, index) =>
-        methodOption(preset, index, capabilities, actions),
-      ),
-    );
-  }, ["capabilities"]);
+  store.subscribe(
+    (state) => {
+      list.replaceChildren(
+        ...offeredMethods(state.capabilities).map((method, index) =>
+          methodOption(method, index, actions),
+        ),
+      );
+    },
+    ["capabilities"],
+  );
 
   // Only the checked state changes here: re-rendering the radios would drop keyboard focus.
   store.subscribe(
