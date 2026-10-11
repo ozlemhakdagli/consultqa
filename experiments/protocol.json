@@ -1,0 +1,34 @@
+{
+  "protocol_version": "docrag-v1",
+  "frozen_on": "2026-10-11",
+  "files": {
+    "corpus": {
+      "path": "data/sample/corpus.jsonl",
+      "sha256": "f45275ade478f88526fcaaa285ba21f1a8a6d0a81fc85d7bc316ca4fcb1f010f"
+    },
+    "eval_dev": {
+      "path": "data/sample/eval_dev.jsonl",
+      "sha256": "9cb1b618b32155480ed7794d1726c54f168670ebf41127c79ccc28fcc96bd545"
+    },
+    "eval_test": {
+      "path": "data/sample/eval_test.jsonl",
+      "sha256": "cf447d604493ce980cfcc3077e389343e5f68a227b76912797ca0ec038107c02"
+    }
+  },
+  "primary": {
+    "retrieval": ["mrr10"],
+    "answer": ["em", "f1"]
+  },
+  "bootstrap": {
+    "resamples": 2000,
+    "seed": 0,
+    "level": 0.95
+  },
+  "verdict_order": ["worse", "better", "undecided"],
+  "tuning": {
+    "graph_restart": [0.5, 0.7, 0.85],
+    "seed_k": [20, 50],
+    "graph_k": [10, 20]
+  },
+  "made_after_results": []
+}
