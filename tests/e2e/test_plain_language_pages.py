@@ -88,3 +88,13 @@ def test_upload_rows_and_failures_are_plain(page, base_url):
     )
     expect(page.locator("#document-list li")).to_have_count(2)
     _clean(page)
+
+
+def test_the_theme_switch_the_notice_and_the_marked_answer_are_plain(page, base_url):
+    caps = caps_without_llm(page, base_url)
+    page.route("**/api/capabilities", lambda route: route.fulfill(json=caps))
+    collection_with_document(page, base_url)
+    _ask(page)
+    expect(page.locator(".answer-card")).to_be_visible()
+    expect(page.locator("#llm-notice")).to_be_visible()
+    _clean(page)

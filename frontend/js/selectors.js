@@ -6,6 +6,12 @@ export function selectedCollection(state) {
   return state.collections.find((collection) => collection.id === state.selectedCollectionId) ?? null;
 }
 
+// True when no folder is chosen yet or the chosen one is the default library.
+export function usesDefaultLibrary(state) {
+  const chosen = selectedCollection(state);
+  return chosen === null || chosen.name === t("library.defaultName");
+}
+
 export function documentNames(state) {
   return new Map(state.documents.map((document) => [document.id, document.filename]));
 }

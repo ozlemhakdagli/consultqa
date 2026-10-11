@@ -74,6 +74,65 @@
   background: var(--warn-bg);
 }
 
+.theme-switch {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.theme-switch legend {
+  float: left;
+  padding: 0 12px;
+  line-height: 44px;
+  font-weight: 700;
+}
+
+.theme-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5rem;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border-left: 1px solid var(--border);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.theme-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.theme-option:has(input:checked) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.theme-option:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.notice {
+  margin: 12px 0 0;
+  padding: 12px 16px;
+  color: var(--info);
+  background: var(--info-bg);
+  border-left: 4px solid currentColor;
+  border-radius: var(--radius);
+}
+
 .reason {
   margin-top: 8px;
   padding: 8px 12px;
@@ -301,6 +360,10 @@ legend {
   margin-top: 16px;
 }
 
+.result[aria-busy="true"] {
+  opacity: 0.55;
+}
+
 .loading {
   color: var(--muted);
 }
@@ -335,6 +398,12 @@ legend {
 .meta {
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.answer-text,
+.source-passage,
+.note {
+  max-width: 75ch;
 }
 
 .marker {
@@ -372,9 +441,11 @@ legend {
   outline: 2px solid var(--accent);
 }
 
-.citation-card .button {
-  width: auto;
-  margin-top: 8px;
+.passage-label {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .source-passage {
@@ -382,6 +453,19 @@ legend {
   padding-left: 12px;
   border-left: 3px solid var(--accent);
   white-space: pre-line;
+}
+
+.source-passage mark {
+  padding: 2px 0;
+  color: var(--mark-text);
+  background: var(--mark-bg);
+}
+
+.source-answer {
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .error-detail {

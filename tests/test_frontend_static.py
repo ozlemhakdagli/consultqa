@@ -128,6 +128,7 @@ TEXT_PAIRS = [
     ("warn", "warn-bg"),
     ("info", "info-bg"),
     ("disabled-text", "surface"),
+    ("mark-text", "mark-bg"),
 ]
 
 
@@ -171,14 +172,12 @@ def _contrast(first: str, second: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-def _colour_tokens(css: str) -> dict[str, str]:
-    return dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;", css))
-
-
 def _light_and_dark() -> tuple[dict[str, str], dict[str, str]]:
     css = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
-    split = css.index("@media (prefers-color-scheme: dark)")
-    return _colour_tokens(css[:split]), _colour_tokens(css[split:])
+    pairs = re.findall(
+        r"--([a-z-]+):\s*light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)\s*;", css
+    )
+    return {n: light for n, light, _ in pairs}, {n: dark for n, _, dark in pairs}
 
 
 def test_index_html_is_a_shell_without_visible_text():
@@ -188,7 +187,9 @@ def test_index_html_is_a_shell_without_visible_text():
     html = (FRONTEND / "index.html").read_text(encoding="utf-8")
     assert '<html lang="tr">' in html
     scripts = [attrs for tag, attrs in page.tags if tag == "script"]
-    assert [s.get("src") for s in scripts] == ["/js/main.js"] and scripts[0]["type"] == "module"
+    assert [s.get("src") for s in scripts] == ["/js/theme-init.js", "/js/main.js"]
+    assert scripts[1]["type"] == "module"
+    assert not {"type", "defer", "async"} & set(scripts[0])
     for tag, attrs in page.tags:
         assert "style" not in attrs, tag
         assert not [name for name in attrs if name.startswith("on")], tag
@@ -217,9 +218,21 @@ def test_text_contrast_of_the_tokens_meets_wcag_aa():
             assert ratio >= 4.5, (scheme, foreground, background, round(ratio, 2))
 
 
-def test_dark_scheme_redefines_every_colour_token():
+def test_every_colour_token_has_a_light_and_a_dark_value():
+    css = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
+    assert not re.search(r"--[a-z-]+:\s*#[0-9a-fA-F]{6}\s*;", css)
+    assert re.search(r':root\[data-theme="light"\]\s*{\s*color-scheme: light;', css)
+    assert re.search(r':root\[data-theme="dark"\]\s*{\s*color-scheme: dark;', css)
     light, dark = _light_and_dark()
-    assert set(light) == set(dark)
+    assert light and set(light) == set(dark)
+
+
+def test_the_early_theme_script_runs_before_the_stylesheets_and_shares_the_key():
+    names = [a.get("src") or a.get("href") for tag, a in _page().tags if tag in ("script", "link")]
+    assert names.index("/js/theme-init.js") < names.index("/css/tokens.css")
+    assert "docrag.theme" in (FRONTEND / "js" / "theme-init.js").read_text(encoding="utf-8")
+    assert 'getPref("theme")' in (FRONTEND / "js" / "theme.js").read_text(encoding="utf-8")
+    assert 'PREFIX = "docrag."' in (FRONTEND / "js" / "prefs.js").read_text(encoding="utf-8")
 
 
 def test_reduced_motion_is_respected():
@@ -241,7 +254,6 @@ DYNAMIC_PREFIXES = (
     "documents.status.",
     "system.chip.",
     "system.banner.",
-    "result.notFound.tip",
 )
 
 

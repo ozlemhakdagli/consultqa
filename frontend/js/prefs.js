@@ -16,3 +16,11 @@ export function setPref(name, value) {
     // Remembering is optional: the page works the same without it.
   }
 }
+
+export function removePref(name) {
+  try {
+    localStorage.removeItem(PREFIX + name);
+  } catch {
+    // Nothing was remembered, or storage is blocked: either way there is nothing to forget.
+  }
+}

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
 from playwright.sync_api import expect
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
+
+# The folder a test recorded for each page; open_page chooses it (the page keeps no choice).
+_LIBRARIES: WeakKeyDictionary[Page, str] = WeakKeyDictionary()
 
 
 def unique(prefix: str) -> str:
@@ -29,11 +32,25 @@ def run_js(page: Page, base_url: str, body: str) -> Any:
 
 def open_page(page: Page, base_url: str, *, library: bool = True) -> None:
     """Open the page and wait until the models report ready (the chip reads "Sistem hazır").
-    With ``library`` the page also waits until its library is chosen and the upload is enabled."""
+    With ``library`` the page also waits until its library is chosen and the upload is enabled.
+    A folder that ``new_library`` recorded for this page is then chosen like a person would."""
     page.goto(base_url + "/")
     expect(page.locator("#system-chip")).to_have_text("Sistem hazır")
     if library:
         expect(page.locator("#upload-files")).to_be_enabled()
+        cid = _LIBRARIES.get(page)
+        if cid:
+            select_library(page, cid)
+
+
+def select_library(page: Page, cid: str) -> None:
+    """Choose a folder through the advanced section, wait until its documents are loaded, and
+    close the section again."""
+    open_advanced(page)
+    page.locator("#collection-select").select_option(value=cid)
+    expect(page.locator("#collection-select")).to_have_value(cid)
+    expect(page.locator("#documents-empty")).not_to_have_text("Belgeleriniz getiriliyor…")
+    page.evaluate("document.getElementById('advanced').open = false")
 
 
 def open_advanced(page: Page) -> None:
@@ -75,17 +92,14 @@ def mock_collections_unavailable(page: Page) -> None:
 
 
 def new_library(page: Page, base_url: str) -> str:
-    """Create a uniquely named folder on the server and make the page open on it.
+    """Create a uniquely named folder on the server and record it for this page.
 
-    The page keeps its choice in localStorage; the init script sets that choice only while the page
-    has none, so a test can still change it. Returns the folder id.
+    The page never remembers a folder, so the next ``open_page`` chooses this one through the
+    advanced section. Returns the folder id.
     """
     created = page.request.post(base_url + "/api/collections", data={"name": unique("Klasör")})
     cid = created.json()["id"]
-    page.add_init_script(
-        "try { if (!localStorage.getItem('docrag.collection')) "
-        f"localStorage.setItem('docrag.collection', {json.dumps(cid)}); }} catch (e) {{}}"
-    )
+    _LIBRARIES[page] = cid
     return cid
 
 

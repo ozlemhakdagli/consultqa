@@ -1,50 +1,39 @@
-/* Colour and size tokens. Every text pair is at least 4.5:1 in both schemes (tested). */
+/* Colour and size tokens. Every colour is light-dark(light, dark): the system scheme applies by
+   default, and data-theme on <html> forces one scheme. Every text pair is at least 4.5:1 in both
+   schemes (tested). */
 :root {
   color-scheme: light dark;
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --text: #1b1f24;
-  --muted: #56606d;
-  --accent: #1f5fbf;
-  --accent-text: #ffffff;
-  --border: #d3d9e1;
-  --field: #ffffff;
-  --error: #b42318;
-  --error-bg: #fdeceb;
-  --ok: #146c2e;
-  --ok-bg: #e6f4ea;
-  --warn: #7a4100;
-  --warn-bg: #fff3dc;
-  --info: #1f4f99;
-  --info-bg: #e8f0fc;
-  --code-bg: #eef1f5;
-  --disabled-text: #6b7480;
-  --focus: #1f5fbf;
+  --bg: light-dark(#f5f6f8, #14171c);
+  --surface: light-dark(#ffffff, #1d2229);
+  --text: light-dark(#1b1f24, #e6e9ee);
+  --muted: light-dark(#56606d, #a7b0bd);
+  --accent: light-dark(#1f5fbf, #7aa7ff);
+  --accent-text: light-dark(#ffffff, #0d1117);
+  --border: light-dark(#d3d9e1, #3a424d);
+  --field: light-dark(#ffffff, #232930);
+  --error: light-dark(#b42318, #ff8a80);
+  --error-bg: light-dark(#fdeceb, #3a1f1d);
+  --ok: light-dark(#146c2e, #7fd99a);
+  --ok-bg: light-dark(#e6f4ea, #16301f);
+  --warn: light-dark(#7a4100, #ffc775);
+  --warn-bg: light-dark(#fff3dc, #3a2c12);
+  --info: light-dark(#1f4f99, #9dbfff);
+  --info-bg: light-dark(#e8f0fc, #1b2a44);
+  --code-bg: light-dark(#eef1f5, #242a33);
+  --mark-bg: light-dark(#ffe58a, #6b5500);
+  --mark-text: light-dark(#1b1f24, #f5f0d8);
+  --disabled-text: light-dark(#6b7480, #8d97a5);
+  --focus: light-dark(#1f5fbf, #7aa7ff);
   --radius: 8px;
   --gap: 16px;
+  --gutter: clamp(12px, 3vw, 40px);
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171c;
-    --surface: #1d2229;
-    --text: #e6e9ee;
-    --muted: #a7b0bd;
-    --accent: #7aa7ff;
-    --accent-text: #0d1117;
-    --border: #3a424d;
-    --field: #232930;
-    --error: #ff8a80;
-    --error-bg: #3a1f1d;
-    --ok: #7fd99a;
-    --ok-bg: #16301f;
-    --warn: #ffc775;
-    --warn-bg: #3a2c12;
-    --info: #9dbfff;
-    --info-bg: #1b2a44;
-    --code-bg: #242a33;
-    --disabled-text: #8d97a5;
-    --focus: #7aa7ff;
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }

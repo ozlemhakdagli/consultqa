@@ -1,15 +1,17 @@
 // Use cases of the library: choose the one the page works in, list, create and select folders.
 import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
-import { getPref, setPref } from "../prefs.js";
+import { removePref } from "../prefs.js";
 
 export function createCollectionActions({ api, store, documents }) {
-  // The first of the asked, current and remembered folders that still exists wins.
+  // An older page remembered a folder here. The page always opens on the default library now.
+  removePref("collection");
+
+  // The first of the asked and current folders that still exists wins.
   function keptId(collections, preferredId) {
     const ids = new Set(collections.map((collection) => collection.id));
     const current = store.get().selectedCollectionId;
-    const remembered = getPref("collection");
-    return [preferredId, current, remembered].find((id) => id && ids.has(id)) ?? "";
+    return [preferredId, current].find((id) => id && ids.has(id)) ?? "";
   }
 
   // Without a kept folder the page uses the folder named "Belgelerim", creating it when missing.
@@ -78,7 +80,6 @@ export function createCollectionActions({ api, store, documents }) {
       result: null,
       askMessage: "",
     });
-    setPref("collection", id);
     await documents.loadDocuments();
   }
 

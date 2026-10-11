@@ -13,6 +13,7 @@ import { mountDocumentsView } from "./views/documents.js";
 import { mountMethodsView } from "./views/methods.js";
 import { mountAskView } from "./views/ask-form.js";
 import { mountResultView } from "./views/result.js";
+import { mountThemeView } from "./views/theme.js";
 import { createStore, INITIAL_STATE } from "./state.js";
 
 const api = createApi();
@@ -24,14 +25,20 @@ const uploads = createUploadActions({ api, store, documents });
 const ask = createAskActions({ api, store });
 const actions = { system, collections, documents, uploads, ask };
 
-applyStaticText(document);
-mountSystemView(store);
-mountCollectionsView(store, actions);
-mountDropzoneView(store, actions);
-mountDocumentsView(store, actions);
-mountMethodsView(store, actions);
-mountAskView(store, actions);
-mountResultView(store);
+try {
+  applyStaticText(document);
+  mountSystemView(store);
+  mountCollectionsView(store, actions);
+  mountDropzoneView(store, actions);
+  mountDocumentsView(store, actions);
+  mountMethodsView(store, actions);
+  mountAskView(store, actions);
+  mountResultView(store);
+  mountThemeView();
+} finally {
+  // The page shell was hidden until its text was in place; it can show now.
+  document.body.classList.remove("booting");
+}
 
 collections.loadCollections();
 system.watchUntilReady().then(() => {

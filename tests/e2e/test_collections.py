@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -43,6 +44,19 @@ def test_folders_stay_hidden_until_advanced_options_are_opened(page, base_url):
     expect(page.get_by_label("Kullanılan klasör")).to_be_visible()
 
 
+def test_a_folder_that_is_not_the_default_is_announced(page, base_url):
+    name = unique("Başka")
+    open_page(page, base_url)
+    expect(page.locator("#library-notice")).to_be_hidden()
+    create_collection(page, name)
+    expect(page.locator("#library-notice")).to_have_text(
+        f"Şu anda “{name}” klasörünü kullanıyorsunuz. Varsayılan klasöre dönmek için "
+        "Gelişmiş seçeneklerden “Belgelerim” klasörünü seçin."
+    )
+    page.locator("#collection-select").select_option(label="Belgelerim")
+    expect(page.locator("#library-notice")).to_be_hidden()
+
+
 def test_create_folder_selects_it_and_confirms(page, base_url):
     name = unique("Şirket Kılavuzları İşlem")
     open_page(page, base_url)
@@ -67,14 +81,23 @@ def test_duplicate_and_blank_names_are_explained(page, base_url):
     expect(page.locator("#collection-message")).to_have_text("Lütfen klasör için bir ad yazın.")
 
 
-def test_existing_folders_stay_reachable_and_the_choice_is_remembered(page, base_url):
-    first, second = unique("Birinci"), unique("İkinci")
+def test_choosing_another_folder_lasts_for_this_visit_only(page, base_url):
+    name = unique("Birinci")
     open_page(page, base_url)
-    create_collection(page, first)
-    create_collection(page, second)
-    page.locator("#collection-select").select_option(label=first)
+    create_collection(page, name)
     page.reload()
     expect(page.locator("#system-chip")).to_have_text("Sistem hazır")
-    expect(page.locator("#collection-select option:checked")).to_have_text(first)
-    options = page.locator("#collection-select option")
-    expect(options.filter(has_text="Belgelerim")).to_have_count(1)
+    expect(page.locator("#collection-select option:checked")).to_have_text("Belgelerim")
+    expect(page.locator("#collection-select option").filter(has_text=name)).to_have_count(1)
+
+
+def test_a_folder_remembered_by_an_older_page_is_ignored_and_forgotten(make_page, base_url):
+    page = make_page()
+    other = page.request.post(base_url + "/api/collections", data={"name": unique("Eski")})
+    page.add_init_script(
+        "try { localStorage.setItem('docrag.collection', "
+        f"{json.dumps(other.json()['id'])}); }} catch (e) {{}}"
+    )
+    open_page(page, base_url)
+    expect(page.locator("#collection-select option:checked")).to_have_text("Belgelerim")
+    assert page.evaluate("localStorage.getItem('docrag.collection')") is None

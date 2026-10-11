@@ -1,22 +1,81 @@
-.page {
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 0 16px 32px;
+/* A booting page stays invisible until its text is in place; it appears by itself after 2 s. */
+.booting .topbar,
+.booting .workspace {
+  visibility: hidden;
+  animation: show-anyway 0s 2s forwards;
 }
 
-.app-header {
+@keyframes show-anyway {
+  to {
+    visibility: visible;
+  }
+}
+
+.topbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px 0;
+  gap: 12px var(--gap);
+  padding: 12px var(--gutter);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
-.steps {
+.brand {
+  min-width: 0;
+}
+
+.topbar-tools {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px var(--gap);
+}
+
+#system-banner {
+  margin: var(--gap) var(--gutter) 0;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  padding: var(--gap) var(--gutter) 32px;
+}
+
+/* Wide screens: documents and question on the left, the answer beside them on the right. */
+@media (min-width: 62rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-areas:
+      "documents answer"
+      "ask answer"
+      "advanced answer";
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+  }
+
+  #step-documents {
+    grid-area: documents;
+  }
+
+  #step-ask {
+    grid-area: ask;
+  }
+
+  #step-answer {
+    grid-area: answer;
+    position: sticky;
+    top: var(--gap);
+    max-height: calc(100vh - 2 * var(--gap));
+    max-height: calc(100dvh - 2 * var(--gap));
+    overflow-y: auto;
+  }
+
+  #advanced {
+    grid-area: advanced;
+  }
 }
 
 .form {
@@ -28,10 +87,6 @@
 
 /* A phone keeps the same single column, with a little less room around each step. */
 @media (max-width: 30rem) {
-  .page {
-    padding: 0 12px 24px;
-  }
-
   .card {
     padding: 14px;
   }

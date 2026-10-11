@@ -3,6 +3,7 @@
 import { el, byId, setVisible } from "../dom.js";
 import { errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
+import { revealIfHidden } from "../scroll.js";
 import { documentNames } from "../selectors.js";
 import { renderAnswer } from "./answer.js";
 
@@ -11,13 +12,7 @@ function notFoundCard() {
     "article",
     { class: "notfound-card" },
     el("h3", { attrs: { id: "result-title", tabindex: -1 }, text: t("result.notFound.title") }),
-    el("p", { text: t("result.notFound.body") }),
-    el(
-      "ul",
-      {},
-      el("li", { text: t("result.notFound.tip1") }),
-      el("li", { text: t("result.notFound.tip2") }),
-    ),
+    el("p", { text: t("result.notFound.hint") }),
   );
 }
 
@@ -36,27 +31,44 @@ function renderResult(result, names) {
   return [errorCard(result)];
 }
 
+// Says in the answer area that the AI answer mode is not configured, so answers are only passages.
+function watchLlmNotice(store) {
+  const notice = byId("llm-notice");
+  store.subscribe(
+    (state) => {
+      const off = state.capabilities !== null && state.capabilities.llm_configured === false;
+      setVisible(notice, off);
+      notice.textContent = off ? t("answer.llmOff") : "";
+    },
+    ["capabilities"],
+  );
+}
+
 export function mountResultView(store) {
   const container = byId("result");
   const empty = byId("result-empty");
+  const loading = byId("result-loading");
   let shown = null;
+  watchLlmNotice(store);
 
   store.subscribe(
     (state) => {
       setVisible(empty, !state.asking && !state.result);
+      setVisible(loading, state.asking);
+      loading.textContent = state.asking ? t("ask.loading") : "";
       container.setAttribute("aria-busy", String(state.asking));
-      if (state.asking) {
-        container.replaceChildren(
-          el("p", { class: "loading", attrs: { role: "status" }, text: t("ask.loading") }),
-        );
-        return;
-      }
+      // While a question is searched the previous answer stays in place, dimmed.
+      if (state.asking) return;
       const fresh = state.result !== shown;
       shown = state.result;
       const nodes = state.result ? renderResult(state.result, documentNames(state)) : [];
       container.replaceChildren(...nodes.filter(Boolean));
-      // Focus moves to the heading only for a new result, not when the documents list changes.
-      if (fresh && state.result) container.querySelector("#result-title")?.focus();
+      // Focus moves to the heading only for a new result, and without scrolling; then the panel is
+      // brought into view once, if it is not in view already.
+      if (fresh && state.result) {
+        container.querySelector("#result-title")?.focus({ preventScroll: true });
+        revealIfHidden(byId("step-answer"));
+      }
     },
     ["asking", "result", "documents"],
   );

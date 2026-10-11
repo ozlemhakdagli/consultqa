@@ -14,6 +14,7 @@ def test_page_has_two_numbered_steps_and_closed_advanced_options(page, base_url)
     )
     assert page.evaluate("document.getElementById('advanced').open") is False
     expect(page.locator("#system-banner")).to_be_hidden()
+    expect(page.get_by_role("group", name="Tema")).to_be_visible()
 
 
 def test_banner_explains_the_model_loading_and_disappears_when_ready(page, base_url):

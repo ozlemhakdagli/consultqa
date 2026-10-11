@@ -30,7 +30,8 @@ export function createAskActions({ api, store }) {
       return;
     }
     // Set before the first await, so a second click returns at once (no double request).
-    store.set({ asking: true, result: null, askMessage: "" });
+    // The previous result stays on screen while the question is searched (the page keeps its height).
+    store.set({ asking: true, askMessage: "" });
     try {
       const body = await api.ask(state.selectedCollectionId, text, state.selectedPreset);
       store.set({ result: answerResult(state, body) });

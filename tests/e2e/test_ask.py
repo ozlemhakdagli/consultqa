@@ -36,8 +36,7 @@ def test_ask_is_locked_and_says_why(page, base_url):
     )
     page.unroute("**/api/collections")
     new_library(page, base_url)
-    page.reload()
-    expect(page.locator("#system-chip")).to_have_text("Sistem hazır")
+    open_page(page, base_url)
     expect(page.locator("#ask-reason")).to_have_text("Soru sormak için önce bir belge ekleyin.")
     upload_text(page, "ocak.md")
     expect(page.get_by_role("button", name=ASK)).to_be_enabled()
@@ -47,7 +46,7 @@ def test_ask_is_locked_and_says_why(page, base_url):
 def test_only_the_recommended_mode_is_chosen_until_advanced_options_are_opened(page, base_url):
     open_page(page, base_url)
     assert page.evaluate("document.getElementById('advanced').open") is False
-    expect(page.get_by_role("radio")).to_have_count(0)  # hidden inside the closed section
+    expect(page.locator("#advanced").get_by_role("radio")).to_have_count(0)  # closed section
 
 
 def test_methods_have_plain_names_and_the_recommended_one_is_selected(page, base_url):
@@ -115,7 +114,19 @@ def test_example_questions_fill_the_box_without_asking(page, base_url):
     collection_with_document(page, base_url)
     requests = []
     page.on("request", lambda r: requests.append(r.url) if r.url.endswith("/ask") else None)
-    expect(page.locator("#example-list button")).to_have_count(3)
+    expect(page.locator("#example-list button")).to_have_text(
+        [
+            "Garanti süresi kaç yıldır?",
+            "Başvuru için hangi belgeler gerekir?",
+            "Teslimat ne kadar sürer?",
+        ]
+    )
+    expect(page.locator("#examples-title")).to_have_text(
+        "Örnek sorular (kendi belgenize göre değiştirin):"
+    )
+    expect(page.locator("#ask-tip")).to_have_text(
+        "İpucu: Belgede geçen kelimelerle, tek bir bilgiyi soran kısa bir soru yazın."
+    )
     page.get_by_role("button", name="Garanti süresi kaç yıldır?").click()
     expect(page.get_by_label("Sorunuz", exact=True)).to_have_value("Garanti süresi kaç yıldır?")
     expect(page.get_by_label("Sorunuz", exact=True)).to_be_focused()
@@ -147,11 +158,11 @@ def test_a_blank_question_is_explained_and_the_message_goes_away_when_typing(pag
     collection_with_document(page, base_url)
     page.get_by_role("button", name=ASK).click()
     expect(page.locator("#ask-message")).to_have_text("Lütfen bir soru yazın.")
-    page.get_by_role("button", name="Kurulum nasıl yapılır?").click()
+    page.get_by_role("button", name="Teslimat ne kadar sürer?").click()
     expect(page.locator("#ask-message")).to_be_hidden()
 
 
-def test_the_answer_shows_its_text_then_the_source_with_a_button_for_the_passage(page, base_url):
+def test_the_answer_shows_its_text_then_the_source_in_full(page, base_url):
     collection_with_document(page, base_url)
     expect(page.locator("#result-empty")).to_have_text("Cevabınız burada görünecek.")
     _ask(page)
@@ -159,7 +170,7 @@ def test_the_answer_shows_its_text_then_the_source_with_a_button_for_the_passage
     expect(page.locator("#result-title")).to_contain_text("Stok modülü")
     expect(page.locator("#result-title")).to_be_focused()
     expect(page.locator(".answer-card .note")).to_have_text(
-        "Bu cevap, aşağıdaki kaynaktan olduğu gibi alınmıştır."
+        "Bu cevap belgedeki bu cümleden alındı. Cevap kısa olabilir; tam bağlam için kaynak metnine bakın."
     )
     expect(page.locator(".answer-card .meta")).to_have_count(0)
     expect(page.get_by_role("heading", name="Cevabın kaynağı")).to_be_visible()
@@ -167,11 +178,9 @@ def test_the_answer_shows_its_text_then_the_source_with_a_button_for_the_passage
     expect(card).to_contain_text("Belge: ocak.md")
     expect(card).to_contain_text("Bölüm: Stok")
     expect(card.get_by_role("heading", level=4)).to_have_count(0)
-    passage = page.locator("#cite-1-text")
-    expect(passage).to_be_hidden()
-    card.get_by_role("button", name="Kaynağın metnini göster").click()
-    expect(passage).to_contain_text("Stok modülü performans")
-    expect(card.get_by_role("button", name="Kaynağın metnini gizle")).to_be_visible()
+    expect(page.locator("#cite-1-text")).to_be_visible()
+    expect(page.locator("#cite-1-text")).to_contain_text("Stok modülü performans")
+    expect(page.get_by_role("button", name="Kaynağın metnini göster")).to_have_count(0)
     expect(page.locator("details.trace")).to_have_count(0)
 
 
@@ -226,14 +235,17 @@ def test_unknown_markers_stay_plain_text(page, base_url):
     expect(page.get_by_role("heading", name="Kaynak 2")).to_be_visible()
 
 
-def test_answer_not_found_is_a_calm_state_with_tips(page, base_url):
+def test_answer_not_found_is_a_calm_state_with_one_hint(page, base_url):
     collection_with_document(page, base_url)
     _mock_ask(page, answer=None, citations=[], trace=[], preset="L2", latency_ms=12.0)
     _ask(page)
     expect(page.locator("#result-title")).to_have_text(
         "Bu sorunun cevabı yüklediğiniz belgelerde yok."
     )
-    expect(page.locator(".notfound-card li")).to_have_count(2)
+    expect(page.locator(".notfound-card p")).to_have_text(
+        "Sorunuzu belgede geçen kelimelere daha yakın yazmayı deneyin."
+    )
+    expect(page.locator(".notfound-card li")).to_have_count(0)
     expect(page.locator(".error-card")).to_have_count(0)
 
 
@@ -300,7 +312,7 @@ def test_passage_text_is_shown_as_text_never_as_html(page, base_url):
         page, base_url, content="# Not\n\nBu paragraf <script>window.__pwned = 1</script> içerir.\n"
     )
     _ask(page, question="paragraf")
-    page.locator("#cite-1").get_by_role("button", name="Kaynağın metnini göster").click()
+    expect(page.locator("#cite-1-text")).to_be_visible()
     expect(page.locator("#cite-1-text")).to_contain_text("<script>window.__pwned = 1</script>")
     expect(page.locator(".answer-text")).to_contain_text("<script>")
     assert page.evaluate("window.__pwned") is None

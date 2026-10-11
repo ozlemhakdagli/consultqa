@@ -3,6 +3,12 @@ export const STRINGS = Object.freeze({
   "app.title": "Belge Soru-Cevap",
   "app.lede": "Belgelerinizi ekleyin, sorunuzu yazın. Cevabı, hangi belgeden geldiğiyle birlikte görürsünüz.",
 
+  "theme.legend": "Tema",
+  "theme.system": "Otomatik",
+  "theme.light": "Açık",
+  "theme.dark": "Koyu",
+  "theme.hint": "Otomatik seçeneği cihazınızın açık veya koyu ayarını izler.",
+
   "system.chip.ready": "Sistem hazır",
   "system.chip.loading": "Sistem açılıyor",
   "system.chip.unreachable": "Bağlantı kurulamıyor",
@@ -10,6 +16,7 @@ export const STRINGS = Object.freeze({
   "system.banner.unreachable": "Uygulamaya bağlanılamıyor. Uygulamanın açık olduğundan emin olun. Sayfa birkaç saniyede bir yeniden dener.",
 
   "library.defaultName": "Belgelerim",
+  "library.notDefault": "Şu anda “{name}” klasörünü kullanıyorsunuz. Varsayılan klasöre dönmek için Gelişmiş seçeneklerden “{default}” klasörünü seçin.",
 
   "advanced.title": "Gelişmiş seçenekler",
   "advanced.help": "Çoğu kullanıcının bu bölüme ihtiyacı yoktur. Değiştirmeden de sayfayı rahatça kullanabilirsiniz.",
@@ -58,10 +65,11 @@ export const STRINGS = Object.freeze({
   "ask.help": "Sorunuzu kendi cümlelerinizle yazın. Cevap yalnızca eklediğiniz belgelerde aranır.",
   "ask.questionLabel": "Sorunuz",
   "ask.questionPlaceholder": "Sorunuzu buraya yazın. Örneğin: Garanti süresi kaç yıldır?",
-  "ask.examplesTitle": "Yazmak istemezseniz bir örnek seçin:",
+  "ask.tip": "İpucu: Belgede geçen kelimelerle, tek bir bilgiyi soran kısa bir soru yazın.",
+  "ask.examplesTitle": "Örnek sorular (kendi belgenize göre değiştirin):",
   "ask.example.1": "Garanti süresi kaç yıldır?",
-  "ask.example.2": "Kurulum nasıl yapılır?",
-  "ask.example.3": "Başvuru için hangi belgeler gerekir?",
+  "ask.example.2": "Başvuru için hangi belgeler gerekir?",
+  "ask.example.3": "Teslimat ne kadar sürer?",
   "ask.questionRequired": "Lütfen bir soru yazın.",
   "ask.submit": "Cevabı bul",
   "ask.submitting": "Aranıyor…",
@@ -96,9 +104,12 @@ export const STRINGS = Object.freeze({
 
   "answer.title": "Cevap",
   "answer.empty": "Cevabınız burada görünecek.",
+  "answer.llmOff": "Yapay zekâ ile cevap yazma bu sistemde kapalı; bu yüzden cevaplar belgeden alınan kısa kesitlerdir.",
 
-  "result.extractiveNote": "Bu cevap, aşağıdaki kaynaktan olduğu gibi alınmıştır.",
+  "result.extractiveNote": "Bu cevap belgedeki bu cümleden alındı. Cevap kısa olabilir; tam bağlam için kaynak metnine bakın.",
+  "result.extractiveNoteNoMark": "Bu cevap aşağıdaki kaynaktan alındı. Cevap kısa olabilir; tam bağlam için kaynak metnine bakın.",
   "result.llmNote": "Bu cevabı yapay zekâ yazdı. Önemli bilgileri kaynakla karşılaştırarak kontrol edin.",
+  "result.passageLabel": "Belgedeki metin",
   "result.method": "Kullanılan yöntem: {method}",
   "result.markerLabel": "{number}. kaynağa git",
   "result.sourceTitleOne": "Cevabın kaynağı",
@@ -108,12 +119,8 @@ export const STRINGS = Object.freeze({
   "result.sourceSection": "Bölüm: {section}",
   "result.unknownDocument": "bilinmiyor",
   "result.noSection": "belirtilmemiş",
-  "result.showPassage": "Kaynağın metnini göster",
-  "result.hidePassage": "Kaynağın metnini gizle",
   "result.notFound.title": "Bu sorunun cevabı yüklediğiniz belgelerde yok.",
-  "result.notFound.body": "Belgelerde ilgili bir bilgi olmayabilir ya da sorunuz belgedekinden çok farklı kelimelerle yazılmış olabilir.",
-  "result.notFound.tip1": "Sorunuzu belgede geçen kelimelere daha yakın yazın.",
-  "result.notFound.tip2": "Doğru belgeyi eklediğinizden emin olun.",
+  "result.notFound.hint": "Sorunuzu belgede geçen kelimelere daha yakın yazmayı deneyin.",
   "result.error.title": "Bir sorun oluştu. Lütfen tekrar deneyin.",
 
   "error.validation_error": "Girdiğiniz bilgi geçersiz. Soru ve klasör adı boş bırakılamaz; soru en çok 500, klasör adı en çok 80 karakter olabilir.",

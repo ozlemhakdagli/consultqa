@@ -1,5 +1,7 @@
 """The page against the running Docker stack. It creates nothing except that the first visit
-creates the default library "Belgelerim", and it uploads nothing.
+creates the default library "Belgelerim", and it uploads nothing. The page opens on "Belgelerim";
+test_live_ask_on_an_existing_collection selects another folder through the advanced section and
+only reads (it asks one question).
 
 Needs DOCRAG_LIVE_URL (for example http://127.0.0.1:8000). The ask test also needs
 DOCRAG_LIVE_COLLECTION (a collection label) and DOCRAG_LIVE_QUESTION.

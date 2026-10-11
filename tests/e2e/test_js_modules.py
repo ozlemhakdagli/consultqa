@@ -166,17 +166,25 @@ def test_prefs_survive_blocked_storage(page, base_url):
         page,
         base_url,
         """
-        const { getPref, setPref } = await import('/js/prefs.js');
+        const { getPref, setPref, removePref } = await import('/js/prefs.js');
         setPref('collection', 'abc');
         const stored = getPref('collection');
         const original = Storage.prototype.getItem;
         Storage.prototype.getItem = () => { throw new Error('blocked'); };
         const blocked = getPref('collection');
         Storage.prototype.getItem = original;
-        return [stored, blocked, getPref('never-set')];
+        setPref('collection', 'abc');
+        removePref('collection');
+        const removed = getPref('collection');
+        const originalRemove = Storage.prototype.removeItem;
+        let threw = false;
+        Storage.prototype.removeItem = () => { throw new Error('blocked'); };
+        try { removePref('collection'); } catch { threw = true; }
+        Storage.prototype.removeItem = originalRemove;
+        return [stored, blocked, getPref('never-set'), removed, threw];
     """,
     )
-    assert result == ["abc", "", ""]
+    assert result == ["abc", "", "", "", False]
 
 
 API_SETUP = """
@@ -367,15 +375,11 @@ def test_default_library_is_created_once_selected_and_never_duplicated(page, bas
         const b = setup([two], refuse);
         await b.actions.loadCollections();
         out.b = [b.created, b.store.get().selectedCollectionId];
-        // c. a remembered folder wins while it exists; a vanished one falls back to the default
+        // c. a remembered folder is ignored and forgotten: the default library is chosen
         localStorage.setItem('docrag.collection', 'x');
         const c = setup([two], refuse);
         await c.actions.loadCollections();
-        const remembered = c.store.get().selectedCollectionId;
-        localStorage.setItem('docrag.collection', 'gone');
-        const c2 = setup([two], refuse);
-        await c2.actions.loadCollections();
-        out.c = [remembered, c2.store.get().selectedCollectionId];
+        out.c = [c.store.get().selectedCollectionId, localStorage.getItem('docrag.collection')];
         localStorage.clear();
         // d. another tab created it first (409): not an error, the existing one is used
         const d = setup([[], [{ id: 'x1', name: 'Belgelerim' }]], async () => { throw new ApiError('collection_exists', 409, {}); });
@@ -400,7 +404,7 @@ def test_default_library_is_created_once_selected_and_never_duplicated(page, bas
     assert result == {
         "a": [["Belgelerim"], "n1", ["n1"], 1],
         "b": [[], "b1"],
-        "c": ["x", "b1"],
+        "c": ["b1", None],
         "d": [["Belgelerim"], "x1", None],
         "e": [
             ["", {"kind": "error", "text": "Bir sorun oluştu. Lütfen tekrar deneyin."}, False],
@@ -408,6 +412,49 @@ def test_default_library_is_created_once_selected_and_never_duplicated(page, bas
             "b1",
         ],
     }
+
+
+def test_the_default_library_is_never_replaced_by_another_folder(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        localStorage.clear();
+        const { createStore, INITIAL_STATE } = await import('/js/state.js');
+        const { createCollectionActions } = await import('/js/actions/collections.js');
+        const { ApiError } = await import('/js/errors.js');
+        const setup = (list, createImpl) => {
+          const created = [];
+          const api = {
+            listCollections: async () => list.map((c) => ({ ...c })),
+            createCollection: async (name) => { created.push(name); return createImpl(name); },
+          };
+          const store = createStore({ ...INITIAL_STATE });
+          const documents = { loadDocuments: async () => {} };
+          return { store, created, actions: createCollectionActions({ api, store, documents }) };
+        };
+        // a. a folder remembered by an older page is ignored and forgotten
+        localStorage.setItem('docrag.collection', 'x');
+        const a = setup(
+          [{ id: 'b1', name: 'Belgelerim' }, { id: 'x', name: 'smoke-check' }, { id: 'y', name: 'ci' }],
+          async () => { throw new Error('no create'); });
+        await a.actions.loadCollections();
+        const forgotten = localStorage.getItem('docrag.collection');
+        const aId = a.store.get().selectedCollectionId;
+        // b. the default library is missing: it is created, and that one is selected
+        const bList = [{ id: 's', name: 'smoke-check' }, { id: 'y', name: 'ci' }];
+        const b = setup(bList, async (name) => { const row = { id: 'n1', name }; bList.push(row); return row; });
+        await b.actions.loadCollections();
+        // c. the default library cannot be created: nothing is selected and the error is shown
+        const cList = [{ id: 's', name: 'smoke-check' }, { id: 'y', name: 'ci' }];
+        const c = setup(cList, async () => { throw new ApiError('internal_error', 500, {}); });
+        await c.actions.loadCollections();
+        localStorage.clear();
+        return [forgotten, aId, b.created, b.store.get().selectedCollectionId,
+                c.store.get().selectedCollectionId, c.store.get().documentsMessage.kind];
+        """,
+    )
+    assert result == [None, "b1", ["Belgelerim"], "n1", "", "error"]
 
 
 def test_documents_of_a_previous_collection_never_overwrite_the_current_one(page, base_url):
@@ -801,6 +848,32 @@ def test_ask_stores_an_answer_a_not_found_and_an_error(page, base_url):
         ["answer", True, False, "notFound", "error", "llm_unavailable", "busy", False],
         ["c1", "Soru bir?", "L4+llm"],
     ]
+
+
+def test_ask_keeps_the_previous_result_while_the_next_question_is_searched(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        ASK_SETUP
+        + """
+        let gate;
+        const released = new Promise((resolve) => { gate = resolve; });
+        const replies = [
+          () => ({ answer: 'Bir', citations: [], trace: [], preset: 'L2', latency_ms: 1 }),
+          async () => { await released; return { answer: 'İki', citations: [], trace: [], preset: 'L2', latency_ms: 1 }; },
+        ];
+        const api = { ask: async () => replies.shift()() };
+        const { store, actions } = make(api);
+        await actions.askQuestion('Soru bir?');
+        const first = store.get().result.answer;
+        const second = actions.askQuestion('Soru iki?');
+        const during = [store.get().asking, store.get().result.answer];
+        gate();
+        await second;
+        return [first, during, store.get().result.answer, store.get().asking];
+    """,
+    )
+    assert result == ["Bir", [True, "Bir"], "İki", False]
 
 
 def test_ask_ignores_a_blank_question_and_a_second_call_while_asking(page, base_url):

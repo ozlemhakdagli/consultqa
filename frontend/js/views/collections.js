@@ -1,6 +1,7 @@
 // Folder view: the folder list, the form that creates one, and the message line of that form.
-import { el, byId, showMessage } from "../dom.js";
+import { el, byId, setVisible, showMessage } from "../dom.js";
 import { t } from "../i18n.js";
+import { selectedCollection, usesDefaultLibrary } from "../selectors.js";
 
 function renderOptions(select, { collections }) {
   const empty = collections.length === 0;
@@ -18,6 +19,7 @@ export function mountCollectionsView(store, actions) {
   const form = byId("collection-form");
   const input = byId("collection-name");
   const message = byId("collection-message");
+  const notice = byId("library-notice");
 
   store.subscribe((state) => renderOptions(select, state), ["collections"]);
   store.subscribe(
@@ -25,6 +27,20 @@ export function mountCollectionsView(store, actions) {
       select.value = state.selectedCollectionId;
     },
     ["selectedCollectionId", "collections", "collectionsLoaded"],
+  );
+  // Says in step 1 which folder is in use when it is not the default one.
+  store.subscribe(
+    (state) => {
+      const other = !usesDefaultLibrary(state);
+      setVisible(notice, other);
+      if (other) {
+        notice.textContent = t("library.notDefault", {
+          name: selectedCollection(state).name,
+          default: t("library.defaultName"),
+        });
+      }
+    },
+    ["collections", "selectedCollectionId"],
   );
   store.subscribe((state) => showMessage(message, state.collectionMessage), ["collectionMessage"]);
 

@@ -50,20 +50,6 @@ def test_no_horizontal_scroll_on_a_phone(make_page, base_url):
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 
-def test_the_steps_stack_in_one_column_at_every_width(make_page, base_url):
-    for width, height in ((1280, 900), (390, 844)):
-        page = make_page(width=width, height=height)
-        open_page(page, base_url)
-        boxes = [
-            page.locator(f"#{name}").bounding_box()
-            for name in ("step-documents", "step-ask", "step-answer", "advanced")
-        ]
-        for upper, lower in zip(boxes, boxes[1:], strict=False):
-            assert lower["y"] >= upper["y"] + upper["height"] - 1
-        assert len({round(box["x"]) for box in boxes}) == 1
-        assert boxes[0]["width"] <= 704
-
-
 def test_the_first_screen_on_a_phone_shows_what_to_do(make_page, base_url):
     page = make_page(width=390, height=844)
     new_library(page, base_url)
