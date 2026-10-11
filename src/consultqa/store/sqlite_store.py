@@ -101,9 +101,37 @@ class SqliteStore:
     def list_collections(self) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, name, created_at FROM collections ORDER BY created_at, name"
+                "SELECT c.id, c.name, c.created_at,"
+                " (SELECT COUNT(*) FROM documents d WHERE d.collection_id = c.id) AS document_count"
+                " FROM collections c ORDER BY c.created_at, c.name"
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def delete_collection(self, cid: str) -> None:
+        """Remove a collection with its documents, chunks, graph and jobs, in one transaction.
+
+        The caller makes sure that no job of the collection is still running (see
+        ``has_active_jobs``); the rows of a running job would otherwise be removed under it.
+        """
+        with self._connect() as conn:
+            conn.execute("DELETE FROM chunks WHERE collection_id = ?", (cid,))
+            conn.execute("DELETE FROM documents WHERE collection_id = ?", (cid,))
+            conn.execute("DELETE FROM graphs WHERE collection_id = ?", (cid,))
+            conn.execute("DELETE FROM jobs WHERE collection_id = ?", (cid,))
+            conn.execute("DELETE FROM collections WHERE id = ?", (cid,))
+
+    def has_active_jobs(self, cid: str) -> bool:
+        """True while a job of the collection has not reached a terminal state.
+
+        The terminal states are ``done``, ``failed`` and ``interrupted``; the others are running.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM jobs WHERE collection_id = ?"
+                " AND state NOT IN ('done', 'failed', 'interrupted') LIMIT 1",
+                (cid,),
+            ).fetchone()
+        return row is not None
 
     def find_document_by_hash(self, cid: str, sha: str) -> str | None:
         with self._connect() as conn:

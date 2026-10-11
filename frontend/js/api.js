@@ -45,6 +45,7 @@ export function createApi({ fetchImpl = (...args) => fetch(...args) } = {}) {
     capabilities: () => call("/api/capabilities"),
     listCollections: () => call("/api/collections"),
     createCollection: (name) => call("/api/collections", { method: "POST", json: { name } }),
+    deleteCollection: (cid) => call(collection(cid), { method: "DELETE" }),
     listDocuments: (cid) => call(`${collection(cid)}/documents`),
     deleteDocument: (cid, docId) =>
       call(`${collection(cid)}/documents/${encodeURIComponent(docId)}`, { method: "DELETE" }),

@@ -38,6 +38,10 @@ class DenseBackend(Protocol):
         """Return up to ``k`` ``(id, cosine)`` pairs, best first."""
         ...
 
+    def drop(self) -> None:
+        """Remove every vector and the store itself; dropping a store that is gone is fine."""
+        ...
+
 
 def _normalise_rows(matrix: np.ndarray) -> np.ndarray:
     """L2-normalise each row (or the single vector); zero vectors stay zero."""
@@ -77,6 +81,10 @@ class NumpyDenseBackend:
         scores = matrix @ query
         order = np.argsort(-scores, kind="stable")[:k]
         return [(ids[i], float(scores[i])) for i in order]
+
+    def drop(self) -> None:
+        self._vectors.clear()
+        self._cache = None
 
 
 class DenseChannel:

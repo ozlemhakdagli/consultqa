@@ -31,6 +31,8 @@ from consultqa.api.services import (
     DEFAULT_PRESET,
     PAPER_PRESET,
     Answer,
+    CollectionBusy,
+    CollectionMissing,
     LLMFailed,
     Services,
 )
@@ -63,6 +65,9 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
             raise HTTPException(status_code=429, detail="busy")
         try:
             return call()
+        except CollectionMissing:
+            # Deleted after the route checked it: the same answer as for a collection never created.
+            raise HTTPException(status_code=404, detail="collection_not_found") from None
         finally:
             semaphore.release()
 
@@ -163,7 +168,10 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
             path = Path(staging.name) / f"{uuid.uuid4().hex}{suffix}"
             _save_limited(file.file, path, limit)
             document_id = uuid.uuid4().hex
-            job_id = services.store.create_job(cid, document_id)
+            # Checked again here, under the lock a deletion holds, so no job joins a deleted folder.
+            with services.collections_lock:
+                require_collection(cid)
+                job_id = services.store.create_job(cid, document_id)
             services.jobs.submit(
                 _ingest_job,
                 services,
@@ -186,6 +194,21 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
             raise HTTPException(status_code=404, detail="job_not_found")
         return {"state": job["state"], "error": job["error"], "document_id": job["document_id"]}
 
+    @router.delete("/collections/{cid}", status_code=204)
+    def remove_collection(cid: str) -> Response:
+        """Delete a collection with its documents, chunks, graph, jobs and vectors.
+
+        Refused with 409 while one of its jobs has not finished; then nothing is removed.
+        """
+        require_ready()
+        try:
+            deleted = services.delete_collection(cid)
+        except CollectionBusy:
+            raise HTTPException(status_code=409, detail="collection_busy") from None
+        if not deleted:
+            raise HTTPException(status_code=404, detail="collection_not_found")
+        return Response(status_code=204)
+
     @router.get("/collections/{cid}/documents")
     def list_documents(cid: str) -> list[dict[str, str]]:
         require_collection(cid)
@@ -198,11 +221,13 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     def remove_document(cid: str, doc_id: str) -> Response:
         """Delete a document with its vectors, chunks and graph rows."""
         require_ready()
-        require_collection(cid)
-        deleted = delete_document(
-            store=services.store, dense=services.dense(cid), collection_id=cid, doc_id=doc_id
-        )
-        services.invalidate(cid)
+        # Under the lock a deletion of the folder holds, so the vector store is not built again.
+        with services.collections_lock:
+            require_collection(cid)
+            deleted = delete_document(
+                store=services.store, dense=services.dense(cid), collection_id=cid, doc_id=doc_id
+            )
+            services.invalidate(cid)
         if not deleted:
             raise HTTPException(status_code=404, detail="document_not_found")
         return Response(status_code=204)

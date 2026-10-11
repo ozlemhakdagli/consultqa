@@ -2,7 +2,7 @@
 import { DEFAULT_LIBRARY_NAME } from "../config.js";
 import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
-import { isReservedLibraryName } from "../libraries.js";
+import { isReservedLibraryName, libraryLabel } from "../libraries.js";
 import { removePref } from "../prefs.js";
 
 export function createCollectionActions({ api, store, documents }) {
@@ -75,6 +75,28 @@ export function createCollectionActions({ api, store, documents }) {
     }
   }
 
+  // Deletes a folder with its documents. The folder list is refreshed afterwards. When the folder
+  // in use was the one deleted, the page moves to the default library, creating it when missing.
+  async function deleteCollection(collection) {
+    const wasSelected = collection.id === store.get().selectedCollectionId;
+    try {
+      await api.deleteCollection(collection.id);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      store.set({ collectionMessage: { kind: "error", text: errorMessage(error.code) } });
+      return false;
+    }
+    await loadCollections();
+    if (!wasSelected) await documents.loadDocuments();
+    store.set({
+      collectionMessage: {
+        kind: "info",
+        text: t("collection.deleted", { name: libraryLabel(collection) }),
+      },
+    });
+    return true;
+  }
+
   // Switching collection clears everything that belonged to the previous one.
   async function selectCollection(id) {
     if (!id) return;
@@ -90,5 +112,5 @@ export function createCollectionActions({ api, store, documents }) {
     await documents.loadDocuments();
   }
 
-  return { loadCollections, createCollection, selectCollection };
+  return { loadCollections, createCollection, selectCollection, deleteCollection };
 }

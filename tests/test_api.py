@@ -4,6 +4,7 @@ import httpx
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from store_rows import rows_left
 
 from consultqa.api import services as services_module
 from consultqa.api.app import create_app
@@ -331,6 +332,9 @@ class _UnreachableStore:
     def search(self, vector, k):
         raise ConnectionError("refused")
 
+    def drop(self):
+        raise ConnectionError("refused")
+
 
 def test_unreachable_vector_store_is_503_for_ask_and_delete(services, client):
     cid = _collection(client)
@@ -432,3 +436,147 @@ def test_dimension_is_learnt_by_one_encoder_call(services):
     services.dense("c2")
     assert encoder.calls == 1
     assert dims == [8, 8]
+
+
+def _folder_ids(client) -> list[str]:
+    return [c["id"] for c in client.get("/api/collections").json()]
+
+
+# [R1] DELETE returns 204, and the folder, its documents and its questions are gone with it.
+def test_delete_collection_is_204_and_the_collection_is_gone(client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    assert cid not in _folder_ids(client)
+    assert client.get(f"/api/collections/{cid}/documents").json() == {
+        "detail": "collection_not_found"
+    }
+    ask = client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L2"})
+    assert ask.status_code == 404 and ask.json() == {"detail": "collection_not_found"}
+
+
+def test_deleting_an_unknown_collection_is_404(client):
+    r = client.delete("/api/collections/missing")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "collection_not_found"}
+
+
+def test_the_folder_list_gives_the_number_of_documents(client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    _upload(client, cid, "Başka bir metin", name="b.txt")
+    listed = {c["id"]: c for c in client.get("/api/collections").json()}
+    assert listed[cid]["document_count"] == 2
+
+
+# [R1] A collection with a job that has not finished is refused with 409, and nothing is removed.
+def test_delete_is_refused_while_a_job_of_the_collection_runs(services, client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    job = services.store.create_job(cid, "still-running")
+    services.store.set_job(job, "embedding")
+    r = client.delete(f"/api/collections/{cid}")
+    assert r.status_code == 409
+    assert r.json() == {"detail": "collection_busy"}
+    assert cid in _folder_ids(client)
+    assert len(client.get(f"/api/collections/{cid}/documents").json()) == 1
+    services.store.set_job(job, "done")
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+
+
+# [R1] Before the models are loaded the delete is refused like the other routes that touch stores.
+def test_delete_collection_is_refused_until_the_models_are_ready(services):
+    client = TestClient(create_app(services))
+    cid = _collection(client)
+    services.ready.clear()
+    r = client.delete(f"/api/collections/{cid}")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "not_ready"}
+    services.ready.set()
+    assert cid in _folder_ids(client)
+
+
+# [R1] Every row of the collection goes: its collection, documents, chunks, graph and jobs.
+def test_delete_removes_every_database_row_of_the_collection(services, client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    path = services.settings.state_dir / DB_FILENAME
+    assert all(count > 0 for count in rows_left(path, cid).values())
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    assert set(rows_left(path, cid).values()) == {0}
+
+
+# [R1] The vectors of the collection are dropped, and the store is not kept for reuse.
+def test_delete_drops_the_vector_store_of_the_collection(services, client):
+    make = services.make_dense
+    stores = []
+
+    def remember(cid, dim):
+        store = make(cid, dim)
+        stores.append(store)
+        return store
+
+    services.make_dense = remember
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    store = services.dense(cid)
+    query = services.encoder.encode_query("Stok")
+    assert store.search(query, k=5) != []
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    assert store.search(query, k=5) == []
+    assert services.dense(cid) is not store
+
+
+# [R1] The retrieval state of the collection is dropped with it, so no question is answered from it.
+def test_delete_drops_the_cached_retrieval_state(services, client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L2"})
+    assert cid in services._indexes
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    assert cid not in services._indexes
+
+
+def test_the_retrieval_state_of_a_deleted_collection_is_never_rebuilt(services, client):
+    from consultqa.api.services import CollectionMissing
+
+    cid = _collection(client)
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    with pytest.raises(CollectionMissing):
+        services.index(cid)
+    assert cid not in services._indexes
+
+
+def test_a_question_that_lost_the_race_with_a_delete_is_404(services, client, monkeypatch):
+    from consultqa.api.services import CollectionMissing
+
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+
+    def gone(collection_id):
+        raise CollectionMissing(collection_id)
+
+    monkeypatch.setattr(services, "index", gone)
+    r = client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L2"})
+    assert r.status_code == 404
+    assert r.json() == {"detail": "collection_not_found"}
+
+
+def test_a_document_cannot_be_added_to_a_deleted_collection(client):
+    cid = _collection(client)
+    assert client.delete(f"/api/collections/{cid}").status_code == 204
+    r = _upload(client, cid, TWO_SECTIONS)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "collection_not_found"}
+
+
+# [R1] A vector store that is down stops the delete before any row is removed, so a retry works.
+def test_a_vector_store_that_is_down_keeps_the_collection_for_a_retry(services, client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    services.make_dense = lambda collection_id, dim: _UnreachableStore()
+    r = client.delete(f"/api/collections/{cid}")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "vector_store_unavailable"}
+    assert cid in _folder_ids(client)
+    assert len(client.get(f"/api/collections/{cid}/documents").json()) == 1

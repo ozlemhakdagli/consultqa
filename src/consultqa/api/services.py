@@ -60,6 +60,14 @@ class ChatModel(Protocol):
     def chat(self, messages: list[dict[str, str]]) -> str: ...
 
 
+class CollectionBusy(Exception):
+    """A job of the collection has not finished, so the collection cannot be deleted yet."""
+
+
+class CollectionMissing(Exception):
+    """The collection does not exist, for instance because it was deleted meanwhile."""
+
+
 class LLMFailed(Exception):
     """The LLM reader could not answer. The retrieval trace is still valid and is returned."""
 
@@ -142,14 +150,41 @@ class Services:
     jobs: JobRunner
     ready: threading.Event
     count_tokens: Callable[[str], int]
+    forget_dense: Callable[[str], None]
     _indexes: dict[str, CollectionIndex] = field(default_factory=dict, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    # Held by the steps that add a job to a collection and by its deletion, so that the two never
+    # interleave: a job cannot be added to a collection that is being deleted, and vice versa.
+    collections_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _dim: int | None = field(default=None, init=False, repr=False)
 
     def invalidate(self, cid: str) -> None:
         """Drop the retrieval state of a collection; the next question rebuilds it."""
         with self._lock:
             self._indexes.pop(cid, None)
+
+    def delete_collection(self, cid: str) -> bool:
+        """Delete a collection with its documents, chunks, graph, jobs and vectors.
+
+        Returns False when there is no such collection. Raises ``CollectionBusy`` while one of its
+        jobs has not finished, and then removes nothing. The vectors go before the rows, so a vector
+        store that is down leaves the collection whole for a later attempt.
+        """
+        try:
+            with self.collections_lock, self._lock:
+                if self.store.get_collection(cid) is None:
+                    return False
+                if self.store.has_active_jobs(cid):
+                    raise CollectionBusy(cid)
+                try:
+                    self.dense(cid).drop()
+                    self.store.delete_collection(cid)
+                finally:
+                    self.forget_dense(cid)
+        finally:
+            # Outside the index lock, which invalidate takes; runs on every outcome.
+            self.invalidate(cid)
+        return True
 
     def dense(self, cid: str) -> DenseBackend:
         """The dense store of one collection. The encoder runs once, to learn the dimension."""
@@ -168,6 +203,10 @@ class Services:
             return index
 
     def _build_index(self, cid: str) -> CollectionIndex:
+        # Checked under the index lock, which a deletion also holds: a deleted collection must not
+        # get a vector store back, since creating one would recreate its Qdrant collection.
+        if self.store.get_collection(cid) is None:
+            raise CollectionMissing(cid)
         chunks = self.store.list_chunks(cid)
         raw_graph = self.store.load_graph(cid)
         if raw_graph is None:
@@ -285,7 +324,7 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
 
     if settings.backend == "stub":
         encoder: Encoder = HashEncoder(64)
-        make_dense = _one_store_per_collection(lambda cid, dim: NumpyDenseBackend())
+        dense_stores = _DenseStores(lambda cid, dim: NumpyDenseBackend())
         scorer: Scorer | None = StubScorer()
         reader: Reader | None = StubReader()
         llm: ChatModel | None = StubLLM()
@@ -296,7 +335,7 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         url = settings.qdrant_url
         sentence_encoder = SentenceEncoder(ENCODER_SPECS["bge-m3"])
         encoder = sentence_encoder
-        make_dense = _one_store_per_collection(
+        dense_stores = _DenseStores(
             lambda cid, dim: QdrantDenseBackend(url, QDRANT_COLLECTION_PREFIX + cid, dim)
         )
         scorer = load_cross_encoder()
@@ -310,7 +349,7 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         settings=settings,
         store=store,
         encoder=encoder,
-        make_dense=make_dense,
+        make_dense=dense_stores,
         parser=parser,
         scorer=scorer,
         reader=reader,
@@ -319,6 +358,7 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         jobs=JobRunner() if jobs is None else jobs,
         ready=threading.Event(),
         count_tokens=count_tokens,
+        forget_dense=dense_stores.forget,
     )
 
 
@@ -342,20 +382,24 @@ def _load(services: Services) -> None:
     services.ready.set()
 
 
-def _one_store_per_collection(
-    factory: Callable[[str, int], DenseBackend],
-) -> Callable[[str, int], DenseBackend]:
-    """Wrap a dense-store factory so that every collection gets one shared store."""
-    stores: dict[str, DenseBackend] = {}
-    lock = threading.Lock()
+class _DenseStores:
+    """One dense store per collection: built by ``factory`` on first use, shared afterwards, and
+    dropped from the cache by ``forget`` when its collection is deleted."""
 
-    def make(cid: str, dim: int) -> DenseBackend:
-        with lock:
-            if cid not in stores:
-                stores[cid] = factory(cid, dim)
-            return stores[cid]
+    def __init__(self, factory: Callable[[str, int], DenseBackend]) -> None:
+        self._factory = factory
+        self._stores: dict[str, DenseBackend] = {}
+        self._lock = threading.Lock()
 
-    return make
+    def __call__(self, cid: str, dim: int) -> DenseBackend:
+        with self._lock:
+            if cid not in self._stores:
+                self._stores[cid] = self._factory(cid, dim)
+            return self._stores[cid]
+
+    def forget(self, cid: str) -> None:
+        with self._lock:
+            self._stores.pop(cid, None)
 
 
 def _llm_client(settings: Settings) -> LLMClient | None:

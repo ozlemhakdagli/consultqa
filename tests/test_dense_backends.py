@@ -80,3 +80,32 @@ def test_contract_upsert_is_idempotent(factory, monkeypatch):
     backend.upsert(["a"], np.eye(3, dtype=np.float32)[:1])
     backend.upsert(["a"], np.eye(3, dtype=np.float32)[:1])
     assert [cid for cid, _ in backend.search(np.eye(3, dtype=np.float32)[0], k=5)].count("a") == 1
+
+
+@pytest.mark.parametrize("factory", [_numpy, _qdrant], ids=["numpy", "qdrant"])
+def test_contract_drop_can_be_repeated(factory, monkeypatch):
+    backend = factory(monkeypatch)
+    backend.upsert(["a", "b"], np.eye(3, dtype=np.float32)[:2])
+    backend.drop()
+    backend.drop()  # dropping a store that is already gone is not an error
+
+
+def test_numpy_drop_forgets_every_vector():
+    backend = NumpyDenseBackend()
+    backend.upsert(["a", "b"], np.eye(3, dtype=np.float32)[:2])
+    backend.drop()
+    assert backend.search(np.array([0, 1, 0], dtype=np.float32), k=5) == []
+
+
+def test_qdrant_drop_removes_the_collection_and_its_points(monkeypatch):
+    url = os.environ.get("CONSULTQA_QDRANT_URL")
+    backend = _qdrant(monkeypatch)
+    backend.upsert(["a"], np.eye(3, dtype=np.float32)[:1])
+    backend.drop()
+    from qdrant_client import QdrantClient
+
+    client = QdrantClient(url=url)
+    try:
+        assert client.collection_exists(COLLECTION) is False
+    finally:
+        client.close()

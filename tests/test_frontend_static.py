@@ -65,6 +65,7 @@ def test_every_error_code_of_the_api_has_a_message_in_both_languages():
         "too_many_pages",
         "internal_error",
         "job_not_found",
+        "collection_busy",
     }
     assert contract <= found  # the scan still sees the whole contract
     for path in (TR_JS, EN_JS):

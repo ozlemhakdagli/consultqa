@@ -79,3 +79,9 @@ class QdrantDenseBackend:
                 limit=k,
             )
         return [(point.payload["chunk_id"], float(point.score)) for point in response.points]
+
+    def drop(self) -> None:
+        """Delete the Qdrant collection with its points, so that no vector is left behind."""
+        with _reachable():
+            if self._client.collection_exists(self._collection):
+                self._client.delete_collection(collection_name=self._collection)

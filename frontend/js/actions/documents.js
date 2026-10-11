@@ -2,6 +2,16 @@
 import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
 
+// The folder list shows how many documents each folder has. The list just loaded is the newer
+// count, so the chosen folder takes it; the list is kept as it is when the count did not change.
+function withCount(collections, collectionId, count) {
+  const chosen = collections.find((collection) => collection.id === collectionId);
+  if (!chosen || chosen.document_count === count) return collections;
+  return collections.map((collection) =>
+    collection.id === collectionId ? { ...collection, document_count: count } : collection,
+  );
+}
+
 export function createDocumentActions({ api, store }) {
   // A response for a collection that is no longer selected is dropped, never shown.
   async function loadDocuments() {
@@ -9,7 +19,11 @@ export function createDocumentActions({ api, store }) {
     try {
       const documents = await api.listDocuments(collectionId);
       if (store.get().selectedCollectionId !== collectionId) return;
-      store.set({ documents, documentsLoaded: true });
+      store.set({
+        documents,
+        documentsLoaded: true,
+        collections: withCount(store.get().collections, collectionId, documents.length),
+      });
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (store.get().selectedCollectionId !== collectionId) return;

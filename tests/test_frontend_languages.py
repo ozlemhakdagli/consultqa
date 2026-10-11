@@ -16,6 +16,23 @@ def test_both_dictionaries_have_the_same_keys():
     assert len(keys(TR_JS)) >= 138
 
 
+# The strings of the folder list and of its deletion, in both dictionaries.
+FOLDER_DELETE_KEYS = {
+    "collection.listTitle",
+    "collection.documentCount",
+    "collection.delete",
+    "collection.deleteLabel",
+    "collection.deleteConfirm",
+    "collection.deleted",
+    "error.collection_busy",
+}
+
+
+def test_the_folder_delete_strings_exist_in_both_dictionaries():
+    for path in (TR_JS, EN_JS):
+        assert FOLDER_DELETE_KEYS <= keys(path), (path.name, FOLDER_DELETE_KEYS - keys(path))
+
+
 def test_no_value_is_empty():
     for path in (TR_JS, EN_JS):
         read = values(path)

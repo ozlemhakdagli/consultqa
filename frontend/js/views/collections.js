@@ -4,6 +4,43 @@ import { t } from "../i18n.js";
 import { libraryLabel } from "../libraries.js";
 import { selectedCollection, usesDefaultLibrary } from "../selectors.js";
 
+// The confirmation names the folder and says that its documents go too. Only a yes deletes.
+function askAndDelete(collection, actions) {
+  if (!window.confirm(t("collection.deleteConfirm", { name: libraryLabel(collection) }))) return;
+  actions.collections.deleteCollection(collection);
+}
+
+// One row per folder: its name, its number of documents and the button that deletes it.
+function folderRow(collection, actions) {
+  const label = libraryLabel(collection);
+  return el(
+    "li",
+    { class: "doc-row" },
+    el(
+      "div",
+      { class: "doc-main" },
+      el("p", { class: "doc-name", text: label }),
+      el("p", {
+        class: "doc-status",
+        text: t("collection.documentCount", { count: collection.document_count }),
+      }),
+    ),
+    el("button", {
+      class: "button button-danger",
+      text: t("collection.delete"),
+      attrs: { type: "button", "aria-label": t("collection.deleteLabel", { name: label }) },
+      on: { click: () => askAndDelete(collection, actions) },
+    }),
+  );
+}
+
+function renderFolderList(list, title, { collections }, actions) {
+  const any = collections.length > 0;
+  setVisible(title, any);
+  setVisible(list, any);
+  list.replaceChildren(...collections.map((collection) => folderRow(collection, actions)));
+}
+
 function renderOptions(select, { collections }) {
   const empty = collections.length === 0;
   const options = empty
@@ -21,7 +58,13 @@ export function mountCollectionsView(store, actions) {
   const input = byId("collection-name");
   const message = byId("collection-message");
   const notice = byId("library-notice");
+  const folderTitle = byId("folder-list-title");
+  const folderList = byId("folder-list");
 
+  store.subscribe(
+    (state) => renderFolderList(folderList, folderTitle, state, actions),
+    ["collections"],
+  );
   store.subscribe((state) => renderOptions(select, state), ["collections"]);
   store.subscribe(
     (state) => {
