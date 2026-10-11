@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from docrag.config import PRESETS
-from docrag.eval import run_header
-from docrag.eval.cli import main
-from docrag.eval.datasets import file_sha256
-from docrag.eval.run_header import build_run_header
+from consultqa.config import PRESETS
+from consultqa.eval import run_header
+from consultqa.eval.cli import main
+from consultqa.eval.datasets import file_sha256
+from consultqa.eval.run_header import build_run_header
 
 
 def test_help_exits_cleanly():
@@ -70,8 +70,8 @@ def test_run_rejects_a_baseline_that_is_not_run(tmp_path):
 
 
 def test_run_with_an_llm_preset_needs_an_endpoint(tmp_path, monkeypatch):
-    monkeypatch.delenv("DOCRAG_LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("DOCRAG_LLM_MODEL", raising=False)
+    monkeypatch.delenv("CONSULTQA_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("CONSULTQA_LLM_MODEL", raising=False)
     with pytest.raises(SystemExit) as info:
         main(
             [

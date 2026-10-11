@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from docrag.eval import judge as judge_module
-from docrag.eval.judge import JUDGE_PROMPT, JUDGE_PROMPT_SHA256, judge_correct
+from consultqa.eval import judge as judge_module
+from consultqa.eval.judge import JUDGE_PROMPT, JUDGE_PROMPT_SHA256, judge_correct
 
 
 class FakeLLM:

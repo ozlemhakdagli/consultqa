@@ -1,7 +1,7 @@
 import fitz
 import pytest
 
-from docrag.ingest.parse import ParseError, PyMuPDFParser, TextParser, get_parser
+from consultqa.ingest.parse import ParseError, PyMuPDFParser, TextParser, get_parser
 
 
 def test_text_parser_keeps_turkish_characters(tmp_path):

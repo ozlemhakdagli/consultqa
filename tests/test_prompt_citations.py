@@ -3,10 +3,10 @@ import re
 
 import pytest
 
-from docrag.generate.citations import parse_answer
-from docrag.generate.prompt import build_messages
-from docrag.models import Chunk
-from docrag.retrieve.context import ContextPassage
+from consultqa.generate.citations import parse_answer
+from consultqa.generate.prompt import build_messages
+from consultqa.models import Chunk
+from consultqa.retrieve.context import ContextPassage
 
 _ANY_PASSAGE_TAG = re.compile(r"<\s*/?\s*passage\b", re.IGNORECASE)
 

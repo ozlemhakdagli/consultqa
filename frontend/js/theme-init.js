@@ -3,7 +3,7 @@
 // storage simply leaves the page on the system setting.
 (function applySavedTheme() {
   try {
-    var saved = localStorage.getItem("docrag.theme");
+    var saved = localStorage.getItem("consultqa.theme");
     if (saved === "light" || saved === "dark") {
       document.documentElement.setAttribute("data-theme", saved);
     }

@@ -4,18 +4,18 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-from docrag.config import PRESETS
+from consultqa.config import PRESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 JS_FILES = sorted(FRONTEND.rglob("*.js"))
 STRINGS_JS = FRONTEND / "js" / "strings.js"
 BACKEND_SOURCES = [
-    "src/docrag/api/routes.py",
-    "src/docrag/api/app.py",
-    "src/docrag/api/services.py",
-    "src/docrag/ingest/parse.py",
-    "src/docrag/ingest/pipeline.py",
+    "src/consultqa/api/routes.py",
+    "src/consultqa/api/app.py",
+    "src/consultqa/api/services.py",
+    "src/consultqa/ingest/parse.py",
+    "src/consultqa/ingest/pipeline.py",
 ]
 # Every way the backend writes an error code; the test below fails if one stops matching.
 CODE_PATTERNS = [
@@ -230,9 +230,9 @@ def test_every_colour_token_has_a_light_and_a_dark_value():
 def test_the_early_theme_script_runs_before_the_stylesheets_and_shares_the_key():
     names = [a.get("src") or a.get("href") for tag, a in _page().tags if tag in ("script", "link")]
     assert names.index("/js/theme-init.js") < names.index("/css/tokens.css")
-    assert "docrag.theme" in (FRONTEND / "js" / "theme-init.js").read_text(encoding="utf-8")
+    assert "consultqa.theme" in (FRONTEND / "js" / "theme-init.js").read_text(encoding="utf-8")
     assert 'getPref("theme")' in (FRONTEND / "js" / "theme.js").read_text(encoding="utf-8")
-    assert 'PREFIX = "docrag."' in (FRONTEND / "js" / "prefs.js").read_text(encoding="utf-8")
+    assert 'PREFIX = "consultqa."' in (FRONTEND / "js" / "prefs.js").read_text(encoding="utf-8")
 
 
 def test_reduced_motion_is_respected():

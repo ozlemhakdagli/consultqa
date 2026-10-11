@@ -4,8 +4,8 @@ import httpx
 import pytest
 from qdrant_client.http.exceptions import ResponseHandlingException
 
-from docrag.store import qdrant_dense
-from docrag.store.qdrant_dense import QdrantDenseBackend
+from consultqa.store import qdrant_dense
+from consultqa.store.qdrant_dense import QdrantDenseBackend
 
 
 def _refuse() -> None:
@@ -35,13 +35,13 @@ class _SearchDownClient(_DownClient):
 def test_unreachable_server_at_startup_is_a_connection_error(monkeypatch):
     monkeypatch.setattr(qdrant_dense, "QdrantClient", _DownClient)
     with pytest.raises(ConnectionError):
-        QdrantDenseBackend("http://qdrant:6333", "docrag_c", 8)
+        QdrantDenseBackend("http://qdrant:6333", "consultqa_c", 8)
 
 
 def test_unreachable_server_during_search_is_a_connection_error(monkeypatch):
     import numpy as np
 
     monkeypatch.setattr(qdrant_dense, "QdrantClient", _SearchDownClient)
-    backend = QdrantDenseBackend("http://qdrant:6333", "docrag_c", 8)
+    backend = QdrantDenseBackend("http://qdrant:6333", "consultqa_c", 8)
     with pytest.raises(ConnectionError):
         backend.search(np.ones(8, dtype=np.float32), k=3)

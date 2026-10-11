@@ -1,8 +1,8 @@
 # tests/test_rerank.py
 import pytest
 
-from docrag.models import Chunk, Hit
-from docrag.retrieve.rerank import rerank
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.rerank import rerank
 
 
 def _hits(texts):

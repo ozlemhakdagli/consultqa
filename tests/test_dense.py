@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from docrag.models import Chunk
-from docrag.retrieve.dense import DenseChannel, NumpyDenseBackend
-from docrag.stub import HashEncoder
+from consultqa.models import Chunk
+from consultqa.retrieve.dense import DenseChannel, NumpyDenseBackend
+from consultqa.stub import HashEncoder
 
 
 def test_numpy_backend_returns_the_best_match_first():
@@ -42,7 +42,7 @@ def test_hash_encoder_is_deterministic_across_instances():
 
 @pytest.mark.model
 def test_real_bge_m3_encoder_dimension():
-    from docrag.retrieve.dense import ENCODER_SPECS, SentenceEncoder
+    from consultqa.retrieve.dense import ENCODER_SPECS, SentenceEncoder
 
     vector = SentenceEncoder(ENCODER_SPECS["bge-m3"]).encode_query("sipariş")
     assert vector.shape == (1024,)
@@ -53,7 +53,7 @@ def test_concurrent_loads_build_the_model_once():
     import threading
     import time
 
-    from docrag.retrieve.dense import ENCODER_SPECS, SentenceEncoder
+    from consultqa.retrieve.dense import ENCODER_SPECS, SentenceEncoder
 
     built: list[tuple[str, str]] = []
 

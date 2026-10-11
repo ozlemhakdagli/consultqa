@@ -64,15 +64,15 @@ def _running_server(driver: Playwright, state_dir: Path) -> Iterator[str]:
         port = probe.getsockname()[1]
     env = {
         **os.environ,
-        "DOCRAG_BACKEND": "stub",
-        "DOCRAG_STATE_DIR": str(state_dir),
-        "DOCRAG_MAX_UPLOAD_MB": "1",
+        "CONSULTQA_BACKEND": "stub",
+        "CONSULTQA_STATE_DIR": str(state_dir),
+        "CONSULTQA_MAX_UPLOAD_MB": "1",
         "PYTHONPATH": str(ROOT / "src"),
         "HF_HUB_OFFLINE": "1",
     }
     log_path = state_dir / "server.log"
     command = [
-        sys.executable, "-m", "uvicorn", "docrag.api.app:create_app", "--factory",
+        sys.executable, "-m", "uvicorn", "consultqa.api.app:create_app", "--factory",
         "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning",
     ]  # fmt: skip
     with log_path.open("w") as log:
@@ -103,7 +103,7 @@ def base_url(
     playwright_driver: Playwright, tmp_path_factory: pytest.TempPathFactory
 ) -> Iterator[str]:
     """One stub-backend server shared by the tests of the session."""
-    with _running_server(playwright_driver, tmp_path_factory.mktemp("docrag-state")) as url:
+    with _running_server(playwright_driver, tmp_path_factory.mktemp("consultqa-state")) as url:
         yield url
 
 

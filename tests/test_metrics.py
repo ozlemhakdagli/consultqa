@@ -1,7 +1,7 @@
 # tests/test_metrics.py
 import pytest
 
-from docrag.eval.metrics import (
+from consultqa.eval.metrics import (
     exact_match,
     lenient_match,
     recall_at_k,

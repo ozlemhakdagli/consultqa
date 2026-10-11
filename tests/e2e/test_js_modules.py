@@ -376,10 +376,10 @@ def test_default_library_is_created_once_selected_and_never_duplicated(page, bas
         await b.actions.loadCollections();
         out.b = [b.created, b.store.get().selectedCollectionId];
         // c. a remembered folder is ignored and forgotten: the default library is chosen
-        localStorage.setItem('docrag.collection', 'x');
+        localStorage.setItem('consultqa.collection', 'x');
         const c = setup([two], refuse);
         await c.actions.loadCollections();
-        out.c = [c.store.get().selectedCollectionId, localStorage.getItem('docrag.collection')];
+        out.c = [c.store.get().selectedCollectionId, localStorage.getItem('consultqa.collection')];
         localStorage.clear();
         // d. another tab created it first (409): not an error, the existing one is used
         const d = setup([[], [{ id: 'x1', name: 'Belgelerim' }]], async () => { throw new ApiError('collection_exists', 409, {}); });
@@ -434,12 +434,12 @@ def test_the_default_library_is_never_replaced_by_another_folder(page, base_url)
           return { store, created, actions: createCollectionActions({ api, store, documents }) };
         };
         // a. a folder remembered by an older page is ignored and forgotten
-        localStorage.setItem('docrag.collection', 'x');
+        localStorage.setItem('consultqa.collection', 'x');
         const a = setup(
           [{ id: 'b1', name: 'Belgelerim' }, { id: 'x', name: 'smoke-check' }, { id: 'y', name: 'ci' }],
           async () => { throw new Error('no create'); });
         await a.actions.loadCollections();
-        const forgotten = localStorage.getItem('docrag.collection');
+        const forgotten = localStorage.getItem('consultqa.collection');
         const aId = a.store.get().selectedCollectionId;
         // b. the default library is missing: it is created, and that one is selected
         const bList = [{ id: 's', name: 'smoke-check' }, { id: 'y', name: 'ci' }];

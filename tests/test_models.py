@@ -1,5 +1,5 @@
 # tests/test_models.py
-from docrag.models import Chunk
+from consultqa.models import Chunk
 
 
 def test_section_id_uses_the_heading_path():

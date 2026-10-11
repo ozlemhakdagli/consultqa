@@ -1,7 +1,7 @@
 # tests/test_stats.py
 import pytest
 
-from docrag.eval.stats import Interval, cluster_bootstrap, verdict
+from consultqa.eval.stats import Interval, cluster_bootstrap, verdict
 
 
 def test_bootstrap_is_seeded():

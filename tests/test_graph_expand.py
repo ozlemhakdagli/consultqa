@@ -1,6 +1,6 @@
-from docrag.graph.build import build_graph
-from docrag.graph.expand import expand
-from docrag.models import Chunk
+from consultqa.graph.build import build_graph
+from consultqa.graph.expand import expand
+from consultqa.models import Chunk
 
 
 def _setup():

@@ -1,8 +1,8 @@
-# docrag
+# consultqa
 
-docrag answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
+consultqa answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
 
-**Özet (Türkçe).** docrag, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır.
+**Özet (Türkçe).** consultqa, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır.
 
 ## Status
 
@@ -12,7 +12,7 @@ docrag answers questions about your documents and shows the passage each answer 
 - **Default preset.** The API default is L2, chosen after the test results were recorded. See [Default preset](#default-preset).
 - **Caveats.** The data is synthetic and template-based, and the test split is a regression set rather than a clean holdout. See [Limitations](#limitations).
 
-## From the published method to docrag
+## From the published method to consultqa
 
 **The published method.** Hakdağlı (2024) answers questions over technical update reports in Turkish with a hybrid of two indexes: a dense FAISS index over a multi-qa-mpnet sentence encoder, and a BM25 index. The two ranked lists are concatenated, dense hits first, and an extractive XLM-RoBERTa Large reader answers from the first passage. The paper's headline figures come from its own corpus and question set, which are not published here.
 
@@ -39,11 +39,13 @@ docrag answers questions about your documents and shows the passage each answer 
 
 **What the service adds.** Things the paper does not describe: an upload service with background ingestion jobs, answers that show the whole source passage with the answer sentence marked, a Turkish page for non-technical users, and a Docker deployment.
 
+The project was called docrag while the results in `experiments/results/` were recorded; those files keep the old name for reproducibility.
+
 ## Quick start (Docker)
 
 You need Docker with Compose, about 12 GB of free disk space, and the four pinned models. The first start takes several minutes: the image installs CPU PyTorch, and the service loads the models before `/api/ready` answers 200.
 
-The models are the revisions pinned in `src/docrag/config.py` (`MODEL_PINS`). If they are already in your Hugging Face cache (`~/.cache/huggingface/hub`), copy them into the `models` volume rather than downloading them again:
+The models are the revisions pinned in `src/consultqa/config.py` (`MODEL_PINS`). If they are already in your Hugging Face cache (`~/.cache/huggingface/hub`), copy them into the `models` volume rather than downloading them again:
 
 ```bash
 # 1. Build the image
@@ -58,7 +60,7 @@ docker compose --profile setup run --rm --no-deps -v "$HOME/.cache/huggingface/h
 #     docker compose --profile setup run --rm fetch-models
 
 # 3. Start the app and Qdrant; --wait returns when the app is healthy
-DOCRAG_BACKEND=real docker compose up -d --wait app
+CONSULTQA_BACKEND=real docker compose up -d --wait app
 ```
 
 The paper baseline's embedder may be a symlink in the Hugging Face cache, which `cp -r` copies as a dangling link; if the copy reports a missing file for it, fetch the models with `fetch-models` (step 2b) instead.
@@ -97,7 +99,7 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
 
 - `GET /api/presets` lists the preset names. `GET /api/capabilities` reports readiness, upload limits, the default preset and which methods are available.
 - The default preset is `L2`. Pass `preset` to use another one.
-- Uploads are limited to 20 MB by default (`DOCRAG_MAX_UPLOAD_MB`).
+- Uploads are limited to 20 MB by default (`CONSULTQA_MAX_UPLOAD_MB`).
 - Errors use the body `{"detail": "<code>"}`, for example `not_ready`, `busy`, `llm_unavailable`, `vector_store_unavailable`.
 
 ## Results
@@ -217,8 +219,8 @@ The protocol ordering is evidenced by the file hashes in `experiments/protocol.j
 
 ## Layout
 
-- `src/docrag/`: the service (`api/`), ingestion (`ingest/`), storage (`store/`), retrieval (`retrieve/`), the evidence graph (`graph/`), readers (`generate/`) and evaluation (`eval/`).
-- `frontend/`: the web page (plain ES modules, no build step), served from `DOCRAG_FRONTEND_DIR` (`/app/frontend` in the image).
+- `src/consultqa/`: the service (`api/`), ingestion (`ingest/`), storage (`store/`), retrieval (`retrieve/`), the evidence graph (`graph/`), readers (`generate/`) and evaluation (`eval/`).
+- `frontend/`: the web page (plain ES modules, no build step), served from `CONSULTQA_FRONTEND_DIR` (`/app/frontend` in the image).
 - `reference/paper_method/`: the published method.
 - `data/sample/`: the public synthetic corpus and questions. The sample PDFs in `data/sample/pdf/` are generated by `scripts/make_sample_pdfs.py` and are not tracked.
 - `experiments/`: the protocol and the result tables with their run headers.

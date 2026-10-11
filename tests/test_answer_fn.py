@@ -1,7 +1,7 @@
-from docrag.config import PRESETS
-from docrag.eval.runner import make_answer_fn
-from docrag.models import Chunk, Hit
-from docrag.retrieve.pipeline import RetrievalResult
+from consultqa.config import PRESETS
+from consultqa.eval.runner import make_answer_fn
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.pipeline import RetrievalResult
 
 
 class RecordingReader:

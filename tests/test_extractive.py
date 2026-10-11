@@ -1,6 +1,6 @@
 # tests/test_extractive.py
-from docrag.config import MODEL_PINS
-from docrag.generate.extractive import ExtractiveReader
+from consultqa.config import MODEL_PINS
+from consultqa.generate.extractive import ExtractiveReader
 
 
 def test_span_and_score_are_returned():

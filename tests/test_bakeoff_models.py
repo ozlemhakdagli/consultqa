@@ -2,10 +2,10 @@
 import numpy as np
 import pytest
 
-from docrag.config import MODEL_PINS
-from docrag.eval.bakeoff_models import choose, pinned_revision
-from docrag.retrieve.dense import ENCODER_SPECS, SentenceEncoder
-from docrag.retrieve.rerank import format_qwen3_pair, load_causal_reranker, yes_minus_no
+from consultqa.config import MODEL_PINS
+from consultqa.eval.bakeoff_models import choose, pinned_revision
+from consultqa.retrieve.dense import ENCODER_SPECS, SentenceEncoder
+from consultqa.retrieve.rerank import format_qwen3_pair, load_causal_reranker, yes_minus_no
 
 
 def test_highest_mrr_wins_and_ties_go_to_the_smaller_model():

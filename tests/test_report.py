@@ -1,6 +1,6 @@
 import pytest
 
-from docrag.eval.report import render_ladder
+from consultqa.eval.report import render_ladder
 
 
 def _row(qid, cluster, mrr, em, f1):

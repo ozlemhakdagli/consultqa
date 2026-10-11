@@ -135,7 +135,7 @@ def test_theme_choice_is_validated_applied_and_remembered(page, base_url):
         out.push(root.getAttribute('data-theme'), readTheme());
         chooseTheme('neon', root);
         out.push(root.getAttribute('data-theme'), readTheme());
-        localStorage.setItem('docrag.theme', 'banana');
+        localStorage.setItem('consultqa.theme', 'banana');
         out.push(readTheme());
         localStorage.clear();
         return out;

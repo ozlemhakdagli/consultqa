@@ -1,7 +1,7 @@
 # tests/test_text.py
 import pytest
 
-from docrag.text import casefold_tr, normalize_answer, tokenize_tr
+from consultqa.text import casefold_tr, normalize_answer, tokenize_tr
 
 
 @pytest.mark.parametrize(

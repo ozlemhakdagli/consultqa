@@ -5,7 +5,7 @@ import socket
 import numpy as np
 import pytest
 
-from docrag.retrieve.dense import NumpyDenseBackend
+from consultqa.retrieve.dense import NumpyDenseBackend
 
 COLLECTION = "contract_test"
 
@@ -27,7 +27,7 @@ def _is_loopback(address) -> bool:
 def _allow_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
     """Lift the network block for loopback only, for the live Qdrant contract cases.
 
-    Only called when the owner sets ``DOCRAG_QDRANT_URL``. Any non-loopback connection
+    Only called when the owner sets ``CONSULTQA_QDRANT_URL``. Any non-loopback connection
     still fails, so the rest of the guard in ``conftest.py`` stays in force.
     """
 
@@ -50,12 +50,12 @@ def _numpy(_monkeypatch):
 
 
 def _qdrant(monkeypatch):
-    url = os.environ.get("DOCRAG_QDRANT_URL")
+    url = os.environ.get("CONSULTQA_QDRANT_URL")
     if not url:
-        pytest.skip("DOCRAG_QDRANT_URL is not set")
+        pytest.skip("CONSULTQA_QDRANT_URL is not set")
     from qdrant_client import QdrantClient
 
-    from docrag.store.qdrant_dense import QdrantDenseBackend
+    from consultqa.store.qdrant_dense import QdrantDenseBackend
 
     _allow_loopback(monkeypatch)
     client = QdrantClient(url=url)

@@ -1,5 +1,5 @@
 # tests/test_chunk.py
-from docrag.ingest.chunk import chunk_markdown
+from consultqa.ingest.chunk import chunk_markdown
 
 
 def test_heading_path_and_boundaries():

@@ -1,5 +1,5 @@
-from docrag.baseline.paper_adapter import PaperMethod
-from docrag.models import Chunk
+from consultqa.baseline.paper_adapter import PaperMethod
+from consultqa.models import Chunk
 
 
 class FakeRetriever:

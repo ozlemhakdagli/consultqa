@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-message: "If you use docrag, please cite it using the metadata below."
+message: "If you use consultqa, please cite it using the metadata below."
 type: software
-title: "docrag"
+title: "consultqa"
 version: 0.2.0
 license: MIT
 abstract: "Question answering over uploaded documents with citations: hybrid retrieval, an evidence graph, reranking and an extractive or LLM reader."

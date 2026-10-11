@@ -1,8 +1,8 @@
 import numpy as np
 
-from docrag.graph.build import build_graph
-from docrag.graph.terms import cross_references
-from docrag.models import Chunk
+from consultqa.graph.build import build_graph
+from consultqa.graph.terms import cross_references
+from consultqa.models import Chunk
 
 
 def _chunks():

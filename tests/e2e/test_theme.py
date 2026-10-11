@@ -42,7 +42,7 @@ def test_an_explicit_choice_beats_the_system_and_is_remembered(make_page, base_u
 
 def test_the_remembered_theme_is_applied_before_the_page_script_runs(make_page, base_url):
     page = make_page(color_scheme="light")
-    page.add_init_script("try { localStorage.setItem('docrag.theme', 'dark'); } catch (e) {}")
+    page.add_init_script("try { localStorage.setItem('consultqa.theme', 'dark'); } catch (e) {}")
     page.route("**/js/main.js", lambda route: route.abort())
     page.goto(base_url + "/")
     assert page.evaluate("document.documentElement.dataset.theme") == "dark"

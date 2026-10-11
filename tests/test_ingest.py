@@ -5,13 +5,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from docrag.api.jobs import JobRunner
-from docrag.ingest import pipeline
-from docrag.ingest.parse import PyMuPDFParser, TextParser
-from docrag.ingest.pipeline import delete_document, ingest_file
-from docrag.retrieve.dense import NumpyDenseBackend
-from docrag.store.sqlite_store import SqliteStore
-from docrag.stub import HashEncoder
+from consultqa.api.jobs import JobRunner
+from consultqa.ingest import pipeline
+from consultqa.ingest.parse import PyMuPDFParser, TextParser
+from consultqa.ingest.pipeline import delete_document, ingest_file
+from consultqa.retrieve.dense import NumpyDenseBackend
+from consultqa.store.sqlite_store import SqliteStore
+from consultqa.stub import HashEncoder
 
 
 def _count(text: str) -> int:

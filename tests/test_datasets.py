@@ -2,7 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from docrag.eval.datasets import file_sha256, load_corpus_jsonl
+from consultqa.eval.datasets import file_sha256, load_corpus_jsonl
 
 SAMPLE = Path(__file__).resolve().parents[1] / "data" / "sample" / "corpus.jsonl"
 

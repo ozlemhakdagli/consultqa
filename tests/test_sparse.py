@@ -1,5 +1,5 @@
-from docrag.models import Chunk
-from docrag.retrieve.sparse import SparseChannel
+from consultqa.models import Chunk
+from consultqa.retrieve.sparse import SparseChannel
 
 
 def _chunks():

@@ -1,6 +1,6 @@
 """Screenshots of the page states at phone and desktop width, in both colour schemes.
 
-Runs only when DOCRAG_SHOTS_DIR names a folder; the files are named {device}-{scheme}-{n}-{state}.png.
+Runs only when CONSULTQA_SHOTS_DIR names a folder; the files are named {device}-{scheme}-{n}-{state}.png.
 """
 
 import os
@@ -18,7 +18,7 @@ from ui_helpers import (
     upload_text,
 )
 
-SHOTS = os.environ.get("DOCRAG_SHOTS_DIR")
+SHOTS = os.environ.get("CONSULTQA_SHOTS_DIR")
 DEVICES = {"phone": (390, 844), "desktop": (1280, 800)}
 SCHEMES = ("light", "dark")
 ASK = "Cevabı bul"
@@ -40,7 +40,7 @@ NOT_FOUND_REPLY = {"answer": None, "citations": [], "trace": [], "preset": "L2",
 
 pytestmark = [
     pytest.mark.e2e,
-    pytest.mark.skipif(not SHOTS, reason="set DOCRAG_SHOTS_DIR to save the screenshots"),
+    pytest.mark.skipif(not SHOTS, reason="set CONSULTQA_SHOTS_DIR to save the screenshots"),
 ]
 
 

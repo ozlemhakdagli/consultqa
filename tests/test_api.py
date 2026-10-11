@@ -5,13 +5,13 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from docrag.api import services as services_module
-from docrag.api.app import create_app
-from docrag.api.jobs import JobRunner
-from docrag.api.services import DB_FILENAME, build_services
-from docrag.config import Settings
-from docrag.generate.llm_client import LLMClient
-from docrag.store.sqlite_store import SqliteStore
+from consultqa.api import services as services_module
+from consultqa.api.app import create_app
+from consultqa.api.jobs import JobRunner
+from consultqa.api.services import DB_FILENAME, build_services
+from consultqa.config import Settings
+from consultqa.generate.llm_client import LLMClient
+from consultqa.store.sqlite_store import SqliteStore
 
 TWO_SECTIONS = "# Sipariş\n\nSipariş modülü tablo filtreleme.\n\n# Stok\n\nStok modülü performans."
 

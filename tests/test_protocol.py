@@ -1,7 +1,7 @@
 import json
 
-from docrag.eval.datasets import file_sha256
-from docrag.eval.protocol import load_protocol, verify_protocol
+from consultqa.eval.datasets import file_sha256
+from consultqa.eval.protocol import load_protocol, verify_protocol
 
 
 def test_hash_mismatch_is_reported(tmp_path):

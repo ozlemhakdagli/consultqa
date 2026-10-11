@@ -26,13 +26,13 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from docrag.config import PRESETS, load_settings
-from docrag.eval.cli import _chunks_by_doc, _Components
-from docrag.eval.datasets import file_sha256, load_corpus_jsonl
-from docrag.eval.protocol import load_protocol, verify_protocol
-from docrag.eval.records import load_eval_jsonl
-from docrag.eval.run_header import build_run_header
-from docrag.eval.runner import evaluate_preset, make_answer_fn
+from consultqa.config import PRESETS, load_settings
+from consultqa.eval.cli import _chunks_by_doc, _Components
+from consultqa.eval.datasets import file_sha256, load_corpus_jsonl
+from consultqa.eval.protocol import load_protocol, verify_protocol
+from consultqa.eval.records import load_eval_jsonl
+from consultqa.eval.run_header import build_run_header
+from consultqa.eval.runner import evaluate_preset, make_answer_fn
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROTOCOL = REPO_ROOT / "experiments" / "protocol.json"

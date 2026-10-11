@@ -1,8 +1,8 @@
 # tests/test_fusion.py
 import pytest
 
-from docrag.models import Chunk, Hit
-from docrag.retrieve.fusion import dedupe_by_text, rrf_fuse
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.fusion import dedupe_by_text, rrf_fuse
 
 
 def _hit(cid, text=None):

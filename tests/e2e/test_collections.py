@@ -95,9 +95,9 @@ def test_a_folder_remembered_by_an_older_page_is_ignored_and_forgotten(make_page
     page = make_page()
     other = page.request.post(base_url + "/api/collections", data={"name": unique("Eski")})
     page.add_init_script(
-        "try { localStorage.setItem('docrag.collection', "
+        "try { localStorage.setItem('consultqa.collection', "
         f"{json.dumps(other.json()['id'])}); }} catch (e) {{}}"
     )
     open_page(page, base_url)
     expect(page.locator("#collection-select option:checked")).to_have_text("Belgelerim")
-    assert page.evaluate("localStorage.getItem('docrag.collection')") is None
+    assert page.evaluate("localStorage.getItem('consultqa.collection')") is None

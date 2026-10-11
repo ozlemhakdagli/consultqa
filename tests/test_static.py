@@ -2,10 +2,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from docrag.api.app import create_app
-from docrag.api.jobs import JobRunner
-from docrag.api.services import build_services
-from docrag.config import Settings
+from consultqa.api.app import create_app
+from consultqa.api.jobs import JobRunner
+from consultqa.api.services import build_services
+from consultqa.config import Settings
 
 
 def _client_with_frontend(tmp_path, files):
@@ -50,7 +50,7 @@ def test_missing_frontend_dir_leaves_the_api_running(tmp_path):
 
 
 def test_default_frontend_dir_is_the_repository_folder():
-    from docrag.api.app import DEFAULT_FRONTEND_DIR
+    from consultqa.api.app import DEFAULT_FRONTEND_DIR
 
     assert DEFAULT_FRONTEND_DIR == Path(__file__).resolve().parents[1] / "frontend"
     assert (DEFAULT_FRONTEND_DIR / "index.html").is_file()

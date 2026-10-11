@@ -1,6 +1,6 @@
 # tests/test_context.py
-from docrag.models import Chunk, Hit
-from docrag.retrieve.context import build_context, long_context_order
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.context import build_context, long_context_order
 
 
 def _hit(i):

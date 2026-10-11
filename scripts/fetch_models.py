@@ -2,12 +2,13 @@
 
 Run once before the real backend starts:
 ``docker compose --profile setup run --rm fetch-models``. The download is about 9 GB.
-Every revision comes from ``docrag.config.MODEL_PINS``, so nothing is fetched at a moving revision.
+Every revision comes from ``consultqa.config.MODEL_PINS``, so nothing is fetched at a moving
+revision.
 """
 
 from huggingface_hub import snapshot_download
 
-from docrag.config import MODEL_PINS
+from consultqa.config import MODEL_PINS
 
 FETCH_KEYS = ("bge-m3", "reranker-v2-m3", "xlm-roberta-squad2", "paper-embedder")
 

@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 
-from docrag.config import MODEL_PINS, PRESETS, load_settings
+from consultqa.config import MODEL_PINS, PRESETS, load_settings
 
 
 def test_presets_follow_the_ladder():
@@ -29,5 +29,5 @@ def test_settings_defaults_are_safe():
 
 def test_frontend_dir_is_read_from_the_environment():
     assert load_settings({}).frontend_dir is None
-    settings = load_settings({"DOCRAG_FRONTEND_DIR": "/app/frontend"})
+    settings = load_settings({"CONSULTQA_FRONTEND_DIR": "/app/frontend"})
     assert settings.frontend_dir == Path("/app/frontend")

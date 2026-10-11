@@ -5,7 +5,7 @@ Turkish letter in ``TURKISH_LETTERS``. The content is written in this file. It i
 must not contain private material.
 
 The PDFs embed a TrueType font, because the built-in PDF fonts cannot show İ, ı, Ş, ş, Ğ or ğ.
-The script looks for DejaVuSans.ttf in the usual Linux locations. Set ``DOCRAG_SAMPLE_FONT`` to
+The script looks for DejaVuSans.ttf in the usual Linux locations. Set ``CONSULTQA_SAMPLE_FONT`` to
 another TTF with Turkish glyphs to use a different font.
 
 Usage, from the repository root::
@@ -133,11 +133,11 @@ DOCUMENTS: dict[str, tuple[str, list[tuple]]] = {
 
 
 def _find_font() -> Path:
-    candidates = [os.environ.get("DOCRAG_SAMPLE_FONT", ""), *FONT_CANDIDATES]
+    candidates = [os.environ.get("CONSULTQA_SAMPLE_FONT", ""), *FONT_CANDIDATES]
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return Path(candidate)
-    raise SystemExit("no TTF font with Turkish glyphs found; set DOCRAG_SAMPLE_FONT")
+    raise SystemExit("no TTF font with Turkish glyphs found; set CONSULTQA_SAMPLE_FONT")
 
 
 def _draw_table(page: pymupdf.Page, top: float, header: list[str], rows: list[list[str]]) -> float:

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from docrag.eval.records import EvalRecord, load_eval_jsonl, save_eval_jsonl
+from consultqa.eval.records import EvalRecord, load_eval_jsonl, save_eval_jsonl
 
 
 def test_unknown_answer_type_is_rejected(tmp_path):

@@ -1,10 +1,10 @@
 # tests/test_retrieval_pipeline.py
 import pytest
 
-from docrag.config import PRESETS
-from docrag.graph.build import build_graph
-from docrag.models import Chunk, Hit
-from docrag.retrieve.pipeline import Retriever
+from consultqa.config import PRESETS
+from consultqa.graph.build import build_graph
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.pipeline import Retriever
 
 
 class FakeChannel:

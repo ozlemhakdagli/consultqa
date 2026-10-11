@@ -3,8 +3,8 @@ creates the default library "Belgelerim", and it uploads nothing. The page opens
 test_live_ask_on_an_existing_collection selects another folder through the advanced section and
 only reads (it asks one question).
 
-Needs DOCRAG_LIVE_URL (for example http://127.0.0.1:8000). The ask test also needs
-DOCRAG_LIVE_COLLECTION (a collection label) and DOCRAG_LIVE_QUESTION.
+Needs CONSULTQA_LIVE_URL (for example http://127.0.0.1:8000). The ask test also needs
+CONSULTQA_LIVE_COLLECTION (a collection label) and CONSULTQA_LIVE_QUESTION.
 """
 
 import os
@@ -14,14 +14,14 @@ import pytest
 from playwright.sync_api import expect
 from ui_helpers import open_advanced
 
-LIVE_URL = os.environ.get("DOCRAG_LIVE_URL")
-COLLECTION = os.environ.get("DOCRAG_LIVE_COLLECTION")
-QUESTION = os.environ.get("DOCRAG_LIVE_QUESTION")
-SHOTS = os.environ.get("DOCRAG_SHOTS_DIR")
+LIVE_URL = os.environ.get("CONSULTQA_LIVE_URL")
+COLLECTION = os.environ.get("CONSULTQA_LIVE_COLLECTION")
+QUESTION = os.environ.get("CONSULTQA_LIVE_QUESTION")
+SHOTS = os.environ.get("CONSULTQA_SHOTS_DIR")
 # The presets the page offers; the graph LLM preset stays hidden.
 OFFERED = {"L2", "L3", "L4", "L5", "L4+llm", "paper"}
 
-pytestmark = [pytest.mark.e2e, pytest.mark.skipif(not LIVE_URL, reason="set DOCRAG_LIVE_URL")]
+pytestmark = [pytest.mark.e2e, pytest.mark.skipif(not LIVE_URL, reason="set CONSULTQA_LIVE_URL")]
 
 
 def test_live_page_agrees_with_the_servers_capabilities(page):
@@ -45,7 +45,8 @@ def test_live_page_agrees_with_the_servers_capabilities(page):
 
 
 @pytest.mark.skipif(
-    not (COLLECTION and QUESTION), reason="set DOCRAG_LIVE_COLLECTION and DOCRAG_LIVE_QUESTION"
+    not (COLLECTION and QUESTION),
+    reason="set CONSULTQA_LIVE_COLLECTION and CONSULTQA_LIVE_QUESTION",
 )
 def test_live_ask_on_an_existing_collection(page):
     page.goto(LIVE_URL + "/")

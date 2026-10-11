@@ -2,11 +2,11 @@ from dataclasses import replace
 
 import pytest
 
-from docrag.config import ABSTAIN_WORD, NO_CONTEXT_ANSWER, PRESETS
-from docrag.eval.records import EvalRecord
-from docrag.eval.runner import evaluate_paper, evaluate_preset, make_answer_fn
-from docrag.models import Chunk, Hit
-from docrag.retrieve.pipeline import RetrievalResult
+from consultqa.config import ABSTAIN_WORD, NO_CONTEXT_ANSWER, PRESETS
+from consultqa.eval.records import EvalRecord
+from consultqa.eval.runner import evaluate_paper, evaluate_preset, make_answer_fn
+from consultqa.models import Chunk, Hit
+from consultqa.retrieve.pipeline import RetrievalResult
 
 
 class FakeRetriever:

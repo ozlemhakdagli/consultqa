@@ -2,7 +2,7 @@
 import httpx
 import pytest
 
-from docrag.generate.llm_client import LLMClient, LLMUnavailable
+from consultqa.generate.llm_client import LLMClient, LLMUnavailable
 
 
 def _client(handler):

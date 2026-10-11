@@ -1,5 +1,5 @@
 // Remembered choices in localStorage. Storage can be blocked, so every access is guarded.
-const PREFIX = "docrag.";
+const PREFIX = "consultqa.";
 
 export function getPref(name) {
   try {

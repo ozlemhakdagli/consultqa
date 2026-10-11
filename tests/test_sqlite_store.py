@@ -2,8 +2,8 @@ import sqlite3
 
 import pytest
 
-from docrag.models import Chunk
-from docrag.store.sqlite_store import CollectionExists, SqliteStore
+from consultqa.models import Chunk
+from consultqa.store.sqlite_store import CollectionExists, SqliteStore
 
 
 def _store(tmp_path):

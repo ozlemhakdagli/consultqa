@@ -3,10 +3,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from docrag.api.app import create_app
-from docrag.api.jobs import JobRunner
-from docrag.api.services import build_services
-from docrag.config import PRESETS, Settings
+from consultqa.api.app import create_app
+from consultqa.api.jobs import JobRunner
+from consultqa.api.services import build_services
+from consultqa.config import PRESETS, Settings
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_presets_endpoint_is_unchanged(client):
 
 
 def test_ask_request_default_is_the_service_default():
-    from docrag.api.schemas import AskRequest
-    from docrag.api.services import DEFAULT_PRESET
+    from consultqa.api.schemas import AskRequest
+    from consultqa.api.services import DEFAULT_PRESET
 
     assert AskRequest(question="x").preset == DEFAULT_PRESET

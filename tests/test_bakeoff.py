@@ -1,8 +1,8 @@
 import fitz
 import pytest
 
-from docrag.eval.bakeoff import parser_scores
-from docrag.ingest.parse import DoclingParser, ParseError, TextParser
+from consultqa.eval.bakeoff import parser_scores
+from consultqa.ingest.parse import DoclingParser, ParseError, TextParser
 
 
 def test_perfect_parser_scores_one(tmp_path):
