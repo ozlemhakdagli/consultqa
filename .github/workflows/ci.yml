@@ -25,7 +25,7 @@ jobs:
       - name: Install CPU torch, then the project with all extras
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
-          pip install -e ".[ml,pdf,api,dev]"
+          pip install -e ".[core,ml,pdf,api,dev]"
       - run: ruff check .
       - run: ruff format --check .
       - name: Wait for Qdrant

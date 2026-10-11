@@ -5,4 +5,4 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-      - -e .[ml,pdf,api,dev,e2e]
+      - -e .[core,ml,pdf,api,dev,e2e]

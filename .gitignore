@@ -6,13 +6,16 @@ __pycache__/
 .ipynb_checkpoints/
 *.egg-info/
 .ruff_cache/
-.env
-.env.*
 
 # Private material: never tracked, never copied into images
 private/
 data/raw/
+docs/
 *.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
 .env
 .env.*
 !.env.example

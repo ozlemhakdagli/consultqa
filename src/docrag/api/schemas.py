@@ -4,6 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from docrag.api.services import DEFAULT_PRESET
+
 # Whitespace-stripped text of 1 to 500 characters
 BoundedText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 # Whitespace-stripped collection name of 1 to 80 characters
@@ -22,7 +24,7 @@ class AskRequest(BaseModel):
     """Body of a question. ``k`` is the number of passages the LLM reader sees."""
 
     question: BoundedText
-    preset: str = "L2"
+    preset: str = DEFAULT_PRESET
     k: int | None = Field(default=None, ge=1, le=20)
 
 

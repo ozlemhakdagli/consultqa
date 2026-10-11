@@ -80,3 +80,21 @@ def test_compose_smoke_checks_the_page_and_the_capabilities():
     ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
     script = "\n".join(step.get("run", "") for step in ci["jobs"]["compose-smoke"]["steps"])
     assert "/js/main.js" in script and "/api/capabilities" in script
+
+
+def test_ci_and_conda_env_install_the_core_extra():
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    environment = (ROOT / "environment.yml").read_text(encoding="utf-8")
+    assert ".[core,ml,pdf,api,dev]" in ci
+    assert ".[core,ml,pdf,api,dev,e2e]" in environment
+
+
+def test_requires_python_matches_the_code():
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["requires-python"] == ">=3.11"
+
+
+def test_dockerignore_does_not_send_the_sample_data():
+    lines = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    rules = [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+    assert not any(rule.startswith("!data") for rule in rules), rules

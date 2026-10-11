@@ -64,3 +64,10 @@ def test_capabilities_answer_while_the_models_load(services, client):
 
 def test_presets_endpoint_is_unchanged(client):
     assert client.get("/api/presets").json() == list(PRESETS)
+
+
+def test_ask_request_default_is_the_service_default():
+    from docrag.api.schemas import AskRequest
+    from docrag.api.services import DEFAULT_PRESET
+
+    assert AskRequest(question="x").preset == DEFAULT_PRESET

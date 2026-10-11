@@ -7,12 +7,41 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PRIVATE_PREFIXES = ("private/", "data/raw/")
-PRIVATE_SUFFIXES = (".pdf",)
+PRIVATE_PREFIXES = ("private/", "data/raw/", "docs/", "state/")
+PRIVATE_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".webp")
+
+
+def _is_env_file(path: str) -> bool:
+    """True for .env and .env.* files, except the committed template .env.example."""
+    name = Path(path).name
+    if name == ".env.example":
+        return False
+    return name == ".env" or name.startswith(".env.")
+
+
+def test_gitignore_covers_every_private_kind() -> None:
+    """.gitignore lists each kind of private material, so git never picks one up by accident."""
+    lines = {
+        line.strip() for line in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    }
+    required = [
+        "docs/",
+        "private/",
+        "data/raw/",
+        "state/",
+        "*.pdf",
+        "*.png",
+        "*.jpg",
+        "*.jpeg",
+        "*.webp",
+        ".env",
+    ]
+    missing = [pattern for pattern in required if pattern not in lines]
+    assert missing == [], f".gitignore is missing: {missing}"
 
 
 def test_no_private_path_is_tracked() -> None:
-    """No private directory, raw data file or PDF is tracked by git."""
+    """No private directory, raw data file, PDF, screenshot, state file or env file is tracked."""
     if not (REPO_ROOT / ".git").exists():
         pytest.skip("not a git repository; cannot check tracked files")
     if shutil.which("git") is None:
@@ -29,7 +58,9 @@ def test_no_private_path_is_tracked() -> None:
     offending = [
         path
         for path in tracked
-        if path.startswith(PRIVATE_PREFIXES) or path.endswith(PRIVATE_SUFFIXES)
+        if path.startswith(PRIVATE_PREFIXES)
+        or path.endswith(PRIVATE_SUFFIXES)
+        or _is_env_file(path)
     ]
     assert offending == [], f"private paths are tracked: {offending}"
 
