@@ -12,6 +12,32 @@ docrag answers questions about your documents and shows the passage each answer 
 - **Default preset.** The API default is L2, chosen after the test results were recorded. See [Default preset](#default-preset).
 - **Caveats.** The data is synthetic and template-based, and the test split is a regression set rather than a clean holdout. See [Limitations](#limitations).
 
+## From the published method to docrag
+
+**The published method.** Hakdağlı (2024) answers questions over technical update reports in Turkish with a hybrid of two indexes: a dense FAISS index over a multi-qa-mpnet sentence encoder, and a BM25 index. The two ranked lists are concatenated, dense hits first, and an extractive XLM-RoBERTa Large reader answers from the first passage. The paper's headline figures come from its own corpus and question set, which are not published here.
+
+**What we re-examined.** The same design on new data: a public synthetic Turkish sample of 480 passages, with 200 dev and 400 test questions. Every rung runs under one protocol, so the comparisons use identical questions and splits. Our re-run of the published method is L0.
+
+**What we observed on this data.**
+
+- In the concatenation, dense hits fill the first five positions, so the BM25 hits fall beyond the cut whenever the dense list already has five distinct passages. The reader reads only the first passage. On this sample, BM25 did not change the answer of L0.
+- The exact-match and F1 scores depend on how case, punctuation and repeated tokens are normalised. Scoring the same predictions with Turkish-aware normalisation and multiset F1 raises L0's EM from 0.117 to 0.193 (L1). This is a change of measurement, not of the system.
+
+**What we changed, and why.**
+
+- **Reciprocal rank fusion (RRF)** replaces the concatenation. Both channels now contribute to the ranking, so BM25 can move a passage up. The aim was to let the keyword channel change the result.
+- **Turkish text handling.** Casefolding maps `I` to `ı` and `İ` to `i`, and BM25 matches five-character stems. Python's default lowercasing mishandles the Turkish capital I, and Turkish inflection is heavy.
+- **A multilingual encoder (BGE-M3)** replaces the English-trained sentence encoder, because the documents are Turkish. We did not isolate this change from the fusion change.
+- **A corrected metric (L1)**, applied to the same predictions, as described above.
+
+**What we measured.** On the test split, L2 (the changes above) against L0: MRR@10 0.551 against 0.284, a paired difference of +0.268 [+0.227, +0.308]. Against L1, the system change alone adds EM +0.235 [+0.185, +0.285]. The gain is for the whole bundle; the components are not separated.
+
+**What we tried beyond the paper and did not keep.** A cross-encoder reranker, neighbouring passages and an evidence graph. None improved on L2 on the test split. They remain available as presets and are off by default.
+
+**What we did not reproduce.** We could not reproduce the paper's headline EM and F1 on our sample, and we do not compare our figures with them: the data differ, so the comparison would not be like for like. Everything in this README compares our own re-run (L0) with our changes.
+
+**What the service adds.** Things the paper does not describe: an upload service with background ingestion jobs, answers that show the whole source passage with the answer sentence marked, a Turkish page for non-technical users, and a Docker deployment.
+
 ## Quick start (Docker)
 
 You need Docker with Compose, about 12 GB of free disk space, and the four pinned models. The first start takes several minutes: the image installs CPU PyTorch, and the service loads the models before `/api/ready` answers 200.
