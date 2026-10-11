@@ -1,24 +1,68 @@
-"""Download the pinned model revisions into the Hugging Face cache (HF_HOME, the models volume).
+"""Download the pinned models into the models volume.
+
+Two places, both under the models volume (``/models`` in the image):
+
+- The sentence encoders, the reranker and the reader go into the Hugging Face cache (HF_HOME).
+- The Docling layout and table models, and the RapidOCR models its OCR reads, go into the folder
+  named by ``CONSULTQA_DOCLING_ARTIFACTS`` (the image sets ``/models/docling``). Docling reads that
+  folder through its ``artifacts_path``, so the app never needs the network for them.
 
 Run once before the real backend starts:
-``docker compose --profile setup run --rm fetch-models``. The download is about 9 GB.
-Every revision comes from ``consultqa.config.MODEL_PINS``, so nothing is fetched at a moving
-revision.
+``docker compose --profile setup run --rm fetch-models``. The download is about 9 GB plus 0.5 GB.
+Every revision here is a full commit hash, so nothing is fetched at a moving revision.
 """
 
+import shutil
+from pathlib import Path
+
+import rapidocr
 from huggingface_hub import snapshot_download
 
-from consultqa.config import MODEL_PINS
+from consultqa.config import MODEL_PINS, load_settings
 
 FETCH_KEYS = ("bge-m3", "reranker-v2-m3", "xlm-roberta-squad2", "paper-embedder")
 
+# The commits that Docling requests: the layout model asks for "main" (8f39ad3c...) and the
+# table models for the tag "v2.3.0" (fc0f2d45...). Pinning the commit keeps the cache valid
+# offline and makes the download reproducible.
+DOCLING_REPOS = (
+    ("docling-project/docling-layout-heron", "8f39ad3c0b4c58e9c2d2c84a38465abf757272d8"),
+    ("docling-project/docling-models", "fc0f2d45e2218ea24bce5045f58a389aed16dc23"),
+)
+
+# Docling's default OCR reads these from artifacts_path / "RapidOcr". The rapidocr wheel ships
+# the same files, so they are copied from the installed package, which is the copy the default
+# install uses.
+RAPIDOCR_FILES = (
+    "PP-OCRv6_det_small.onnx",
+    "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+    "PP-OCRv6_rec_small.onnx",
+)
+
+
+def _copy_rapidocr_models(target: Path) -> None:
+    source = Path(rapidocr.__file__).resolve().parent / "models"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in RAPIDOCR_FILES:
+        shutil.copyfile(source / name, target / name)
+
 
 def main() -> None:
-    """Cache each pinned model at its pinned revision."""
+    """Cache each pinned model, then write the Docling models to their own folder."""
     for key in FETCH_KEYS:
         repo_id, revision = MODEL_PINS[key]
         print(f"fetching {key}: {repo_id} @ {revision}", flush=True)
         snapshot_download(repo_id=repo_id, revision=revision)
+
+    folder = load_settings().docling_artifacts
+    if folder is None:
+        raise SystemExit("set CONSULTQA_DOCLING_ARTIFACTS to the folder for the Docling models")
+    for repo_id, revision in DOCLING_REPOS:
+        target = folder / repo_id.replace("/", "--")
+        print(f"fetching docling {repo_id} @ {revision} into {target}", flush=True)
+        snapshot_download(repo_id=repo_id, revision=revision, local_dir=target)
+    print(f"copying the RapidOCR models into {folder / 'RapidOcr'}", flush=True)
+    _copy_rapidocr_models(folder / "RapidOcr")
     print("all pinned models are cached", flush=True)
 
 

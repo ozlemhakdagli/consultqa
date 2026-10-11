@@ -3,15 +3,14 @@
 import re
 from pathlib import Path
 
-from plain_words import find_forbidden
+from frontend_strings import EN_JS, TR_JS, keys, values
+from plain_words import find_forbidden, find_forbidden_en
 
 FRONTEND = Path(__file__).resolve().parents[1] / "frontend"
-LINE = re.compile(r'^\s*"([^"]+)":\s*"(.*)",\s*$')
 
 
 def _values() -> dict[str, str]:
-    lines = (FRONTEND / "js" / "strings.js").read_text(encoding="utf-8").splitlines()
-    return {m.group(1): m.group(2) for line in lines if (m := LINE.match(line))}
+    return values(TR_JS)
 
 
 def test_the_word_scanner_catches_the_forbidden_words_and_spares_plain_ones():
@@ -35,9 +34,8 @@ def test_the_word_scanner_catches_the_forbidden_words_and_spares_plain_ones():
 
 
 def test_every_line_of_strings_js_is_read_by_the_scanner():
-    text = (FRONTEND / "js" / "strings.js").read_text(encoding="utf-8")
-    keys = set(re.findall(r'^\s*"([A-Za-z0-9_.+-]+)":', text, re.MULTILINE))
-    assert keys == set(_values())
+    for path in (TR_JS, EN_JS):
+        assert keys(path) == set(values(path)), path.name
 
 
 def test_no_visible_string_contains_a_technical_word():
@@ -47,4 +45,6 @@ def test_no_visible_string_contains_a_technical_word():
 
 def test_the_html_shell_contains_no_technical_word():
     html = (FRONTEND / "index.html").read_text(encoding="utf-8")
-    assert find_forbidden(re.sub(r"<[^>]+>", " ", html)) == []
+    text = re.sub(r"<[^>]+>", " ", html)
+    assert find_forbidden(text) == []
+    assert find_forbidden_en(text) == []

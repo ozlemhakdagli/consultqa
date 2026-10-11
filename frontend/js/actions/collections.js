@@ -1,6 +1,8 @@
 // Use cases of the library: choose the one the page works in, list, create and select folders.
+import { DEFAULT_LIBRARY_NAME } from "../config.js";
 import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
+import { isReservedLibraryName } from "../libraries.js";
 import { removePref } from "../prefs.js";
 
 export function createCollectionActions({ api, store, documents }) {
@@ -14,10 +16,11 @@ export function createCollectionActions({ api, store, documents }) {
     return [preferredId, current].find((id) => id && ids.has(id)) ?? "";
   }
 
-  // Without a kept folder the page uses the folder named "Belgelerim", creating it when missing.
-  // A 409 means another tab created it first: that is not an error, the existing one is used.
+  // Without a kept folder the page uses the default library, creating it when missing. Its stored
+  // name is the same in every language. A 409 means another tab created it first: that is not an
+  // error, the existing one is used.
   async function defaultLibrary(collections) {
-    const name = t("library.defaultName");
+    const name = DEFAULT_LIBRARY_NAME;
     const existing = collections.find((collection) => collection.name === name);
     if (existing) return { collections, id: existing.id };
     try {
@@ -52,6 +55,10 @@ export function createCollectionActions({ api, store, documents }) {
     const trimmed = name.trim();
     if (!trimmed) {
       store.set({ collectionMessage: { kind: "error", text: t("collection.nameRequired") } });
+      return false;
+    }
+    if (isReservedLibraryName(trimmed)) {
+      store.set({ collectionMessage: { kind: "error", text: t("collection.nameReserved") } });
       return false;
     }
     try {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
@@ -31,11 +32,11 @@ def run_js(page: Page, base_url: str, body: str) -> Any:
 
 
 def open_page(page: Page, base_url: str, *, library: bool = True) -> None:
-    """Open the page and wait until the models report ready (the chip reads "Sistem hazır").
+    """Open the page and wait until the models report ready (the chip has the ready class).
     With ``library`` the page also waits until its library is chosen and the upload is enabled.
     A folder that ``new_library`` recorded for this page is then chosen like a person would."""
     page.goto(base_url + "/")
-    expect(page.locator("#system-chip")).to_have_text("Sistem hazır")
+    expect(page.locator("#system-chip")).to_have_class(re.compile(r"\bchip-ready\b"))
     if library:
         expect(page.locator("#upload-files")).to_be_enabled()
         cid = _LIBRARIES.get(page)
@@ -108,6 +109,16 @@ def upload_text(page: Page, filename: str, content: str = SAMPLE, mime: str = "t
     page.locator("#upload-files").set_input_files(
         [{"name": filename, "mimeType": mime, "buffer": content.encode("utf-8")}]
     )
+
+
+READY_TEXT = {"tr": "Kullanıma hazır", "en": "Ready to use"}
+
+
+def upload_and_wait(page: Page, filename: str, content: str, language: str = "tr") -> None:
+    """Upload one file and wait until its row reads "ready" in the given language."""
+    upload_text(page, filename, content)
+    row = page.locator("#document-list li").filter(has_text=filename)
+    expect(row).to_contain_text(READY_TEXT[language])
 
 
 def collection_with_document(

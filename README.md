@@ -1,8 +1,10 @@
 # consultqa
 
-consultqa answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
+English | [Türkçe](README.tr.md)
 
-**Özet (Türkçe).** consultqa, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır.
+consultqa answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish or English, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
+
+**Özet (Türkçe).** consultqa, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır. Tam Türkçe kılavuz: [README.tr.md](README.tr.md).
 
 ## Status
 
@@ -37,15 +39,15 @@ consultqa answers questions about your documents and shows the passage each answ
 
 **What we did not reproduce.** We did not reproduce the paper's headline EM and F1. Its data are not public, so the figures are not comparable with ours. Everything in this README compares our own re-run (L0) with our changes.
 
-**What the service adds.** Things the paper does not describe: an upload service with background ingestion jobs, answers that show the whole source passage with the answer sentence marked, a Turkish page for non-technical users, and a Docker deployment.
+**What the service adds.** Things the paper does not describe: an upload service with background ingestion jobs, answers that show the whole source passage with the answer sentence marked, a page in Turkish and English for non-technical users, and a Docker deployment.
 
 The project was called docrag while the results in `experiments/results/` were recorded; those files keep the old name for reproducibility.
 
 ## Quick start (Docker)
 
-You need Docker with Compose, about 12 GB of free disk space, and the four pinned models. The first start takes several minutes: the image installs CPU PyTorch, and the service loads the models before `/api/ready` answers 200.
+You need Docker with Compose, about 12 GB of free disk space, the four pinned models and the Docling models. The first start takes several minutes: the image installs CPU PyTorch, and the service loads the models before `/api/ready` answers 200.
 
-The models are the revisions pinned in `src/consultqa/config.py` (`MODEL_PINS`). If they are already in your Hugging Face cache (`~/.cache/huggingface/hub`), copy them into the `models` volume rather than downloading them again:
+The models are the revisions pinned in `src/consultqa/config.py` (`MODEL_PINS`), and the Docling revisions are pinned in `scripts/fetch_models.py`. If they are already in your Hugging Face cache (`~/.cache/huggingface/hub`), copy them into the `models` volume rather than downloading them again:
 
 ```bash
 # 1. Build the image
@@ -56,12 +58,14 @@ MODELS="models--BAAI--bge-m3 models--BAAI--bge-reranker-v2-m3 models--deepset--x
 docker compose --profile setup run --rm --no-deps -v "$HOME/.cache/huggingface/hub:/src:ro" \
   --entrypoint sh fetch-models -c "mkdir -p /models/hub && for m in $MODELS; do cp -r /src/\$m /models/hub/; done"
 
-# 2b. Without a cache, download the same revisions into the volume (about 9 GB)
+# 2b. Without a cache, download the same revisions into the volume (about 9.5 GB)
 #     docker compose --profile setup run --rm fetch-models
 
 # 3. Start the app and Qdrant; --wait returns when the app is healthy
 CONSULTQA_BACKEND=real docker compose up -d --wait app
 ```
+
+Step 2 does not copy the Docling models. The cache keeps them in another folder layout, and the app reads them from `/models/docling` in the volume (`CONSULTQA_DOCLING_ARTIFACTS`), together with the RapidOCR models. Run `docker compose --profile setup run --rm fetch-models` after step 2 as well. It checks the four copied models and downloads the Docling models (about 0.5 GB). Without them, PDF uploads fail with `parse_failed`.
 
 The paper baseline's embedder may be a symlink in the Hugging Face cache, which `cp -r` copies as a dangling link; if the copy reports a missing file for it, fetch the models with `fetch-models` (step 2b) instead.
 
@@ -69,15 +73,22 @@ Then open **http://127.0.0.1:8000/**. To check the service without downloading m
 
 ## Using the page
 
-The page is in Turkish and works in three steps:
+The page is in Turkish and English and works in three steps. It opens in Turkish when the browser language is Turkish and in English otherwise; the switch in the top bar (Türkçe / English) changes it, and the choice is saved in the browser. The steps are called:
 
-1. **Belgelerinizi ekleyin.** Drop files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed; this runs in the background.
-2. **Sorunuzu yazın.** Ask in your own words. Example questions are one click away.
-3. **Cevap.** The answer appears with the document and section it came from. The whole source text is shown, with the sentence that contains the answer highlighted.
+1. **Add your documents** (Belgelerinizi ekleyin). Drop files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed; this runs in the background.
+2. **Type your question** (Sorunuzu yazın). Ask in your own words. Example questions are one click away.
+3. **Answer** (Cevap). The answer appears with the document and section it came from. The whole source text is shown, with the sentence that contains the answer highlighted.
 
-The page uses one default library, "Belgelerim", created on your first visit. Other libraries and the answer methods other than the recommended one are under "Gelişmiş seçenekler", closed by default. A theme switch (Otomatik, Açık, Koyu) is saved in the browser.
+The page uses one default library, shown as "My documents" ("Belgelerim" in Turkish) and created on your first visit. It is stored under the fixed name `Belgelerim` in both languages, so switching the language never creates a second library. Other libraries and the answer methods other than the recommended one are under "Advanced options" ("Gelişmiş seçenekler"), closed by default. A theme switch (Automatic, Light, Dark; Otomatik, Açık, Koyu) is saved in the browser.
 
 The answer is taken from one passage of your document, so it can be short. The page says so. Its source text is always shown.
+
+## Languages
+
+- **The page** is in Turkish and English. The switch in the top bar overrides the browser language and is remembered in the browser. The page never sends its language to the API.
+- **Documents and answers** keep their own language. The reader takes a span of your document, so an English document gives English answers and a Turkish one gives Turkish answers. The page translates only the words around an answer (its notes and the labels of the source), never the answer or the source text.
+- **Keyword search.** Turkish casefolding maps `I` to `ı`, which would stop "Invoices" and "invoice" from meeting in English text. For a document with no Turkish letter (`ç ğ ı ö ş ü İ`) the service lowercases with the default rule instead, and a question is matched under both rules when the library holds such a document. Documents with a Turkish letter are folded exactly as before. The evaluation code does not use this option, and a test checks that the sample corpus and the dev questions give the same tokens and rankings.
+- **LLM prompt.** The instructions to the LLM are in English and ask for an answer in the language of the question. No LLM run has been measured, so no number depends on the prompt.
 
 ## API
 
@@ -101,6 +112,7 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
 - The default preset is `L2`. Pass `preset` to use another one.
 - Uploads are limited to 20 MB by default (`CONSULTQA_MAX_UPLOAD_MB`).
 - Errors use the body `{"detail": "<code>"}`, for example `not_ready`, `busy`, `llm_unavailable`, `vector_store_unavailable`.
+- Every message is a code (for example `not_ready`, `llm_unavailable`), never a sentence in a language; the page turns codes into Turkish or English text.
 
 ## Results
 
@@ -151,7 +163,7 @@ On dev, L2 scores 0.507 MRR@10 and L5 scores 0.535. The graph parameters were ch
 
 ### Bake-offs (dev split; the owner has not yet reviewed them)
 
-**Parser** (`experiments/results/bakeoff-parser.md`). Three synthetic text-layer PDFs (n = 3, so anecdotal), run on the CPU. Both parsers scored 1.000 on word F1 and heading recall. The tie went to the faster one, `pymupdf4llm` (0.28 s per file, against 3.87 s for `docling` including its first model load). The default is unchanged.
+**Parser** (`experiments/results/bakeoff-parser.md`). Three synthetic text-layer PDFs (n = 3, so anecdotal), run on the CPU. Both parsers scored 1.000 on word F1 and heading recall. The tie went to the faster one, `pymupdf4llm` (0.28 s per file, against 3.87 s for `docling` including its first model load). The service no longer uses `pymupdf4llm`: PyMuPDF is AGPL-3.0 or commercial, so the default parser is now `docling` (MIT) for PDFs.
 
 **Embedder** (`experiments/results/bakeoff-embedder.md`). Dense retrieval only, top 20. The rule picks `e5-large-instruct`, but its gain over `bge-m3` is +0.0135 [-0.0372, +0.0672], which includes zero. The default stays `bge-m3` until the owner reviews the table.
 
@@ -193,6 +205,7 @@ The API default was L5 when the tables above were recorded. It was changed to L2
 - Answers are extractive: the reader takes a span from one passage. It does not summarise or combine passages.
 - The LLM answer mode is not included, not measured and has no approved default.
 - The recorded runs used one machine, an NVIDIA GeForce RTX 3080 Ti with CUDA. The run headers record CUDA availability, not the device name.
+- English is not measured. The evaluation sample is Turkish only. English questions are expected to work, because the encoder (BGE-M3), the reranker and the reader (XLM-RoBERTa) are multilingual, but no English quality figure exists. The 5-character BM25 prefix was chosen for Turkish, and the evidence graph (L5) still uses the Turkish casefolding.
 
 ## Privacy
 
@@ -228,4 +241,4 @@ The protocol ordering is evidenced by the file hashes in `experiments/protocol.j
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). The PDF parser is Docling (MIT). The model weights are downloaded separately and keep their own licences.

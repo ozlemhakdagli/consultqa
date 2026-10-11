@@ -4,12 +4,13 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
+from frontend_strings import EN_JS, TR_JS, keys
+
 from consultqa.config import PRESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 JS_FILES = sorted(FRONTEND.rglob("*.js"))
-STRINGS_JS = FRONTEND / "js" / "strings.js"
 BACKEND_SOURCES = [
     "src/consultqa/api/routes.py",
     "src/consultqa/api/app.py",
@@ -39,12 +40,7 @@ TURKISH_LETTERS = re.compile("[çğıöşüÇĞİÖŞÜ]")
 IMPORT = re.compile(r"""(?:from\s+|import\s*\(\s*)["'](\.{1,2}/[^"']+)["']""")
 
 
-def _string_keys() -> set[str]:
-    text = STRINGS_JS.read_text(encoding="utf-8")
-    return set(re.findall(r'^\s*"([A-Za-z0-9_.+-]+)":', text, re.MULTILINE))
-
-
-def test_every_error_code_of_the_api_has_a_turkish_message():
+def test_every_error_code_of_the_api_has_a_message_in_both_languages():
     found: set[str] = set()
     for source in BACKEND_SOURCES:
         text = (ROOT / source).read_text(encoding="utf-8")
@@ -71,9 +67,10 @@ def test_every_error_code_of_the_api_has_a_turkish_message():
         "job_not_found",
     }
     assert contract <= found  # the scan still sees the whole contract
-    keys = _string_keys()
-    missing = sorted(code for code in found | CLIENT_CODES if f"error.{code}" not in keys)
-    assert missing == [] and "error.unknown" in keys
+    for path in (TR_JS, EN_JS):
+        present = keys(path)
+        missing = sorted(code for code in found | CLIENT_CODES if f"error.{code}" not in present)
+        assert missing == [] and "error.unknown" in present, path.name
 
 
 def test_every_preset_is_offered_with_plain_copy_or_deliberately_hidden():
@@ -84,10 +81,11 @@ def test_every_preset_is_offered_with_plain_copy_or_deliberately_hidden():
     hidden = set(re.findall(r'"([^"]+)"', hidden_list.group(1)))
     assert set(PRESETS) | {"paper"} == catalog | hidden
     assert catalog & hidden == set()
-    keys = _string_keys()
-    for key in re.findall(r'key: "([^"]+)"', text):
-        for part in ("label", "summary", "note"):
-            assert f"method.{key}.{part}" in keys, f"method.{key}.{part}"
+    for path in (TR_JS, EN_JS):
+        present = keys(path)
+        for key in re.findall(r'key: "([^"]+)"', text):
+            for part in ("label", "summary", "note"):
+                assert f"method.{key}.{part}" in present, f"{path.name} method.{key}.{part}"
 
 
 def test_scripts_never_build_html_from_text():
@@ -103,9 +101,9 @@ def test_relative_imports_resolve():
             assert (path.parent / target).resolve().is_file(), f"{path.name} imports {target}"
 
 
-def test_turkish_text_lives_only_in_strings_js():
+def test_turkish_text_lives_only_in_the_dictionaries():
     for path in JS_FILES:
-        if path != STRINGS_JS:
+        if path not in (TR_JS, EN_JS):
             assert not TURKISH_LETTERS.search(path.read_text(encoding="utf-8")), path.name
 
 
@@ -202,7 +200,7 @@ def test_every_static_text_key_exists_in_strings():
         for name in ("data-text", "data-placeholder")
         if name in attrs
     }
-    assert used and used <= _string_keys()
+    assert used and used <= keys(TR_JS) and used <= keys(EN_JS)
 
 
 def test_the_four_stylesheets_are_linked_in_order():
@@ -248,6 +246,14 @@ def test_the_page_flow_is_in_reading_order():
     assert "open" not in advanced  # closed by default
 
 
+def test_noscript_says_it_in_both_languages():
+    html = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    block = re.search(r"<noscript>(.*?)</noscript>", html, re.S)
+    assert block is not None
+    assert 'lang="tr"' in block.group(1) and 'lang="en"' in block.group(1)
+    assert block.group(1).count("JavaScript") >= 4
+
+
 DYNAMIC_PREFIXES = (
     "error.",
     "method.",
@@ -262,11 +268,11 @@ def test_no_string_is_unused():
     sources = "".join(
         path.read_text(encoding="utf-8")
         for path in [*JS_FILES, FRONTEND / "index.html"]
-        if path != STRINGS_JS
+        if path not in (TR_JS, EN_JS)
     )
     unused = [
         key
-        for key in sorted(_string_keys())
+        for key in sorted(keys(TR_JS))
         if not key.startswith(DYNAMIC_PREFIXES) and f'"{key}"' not in sources
     ]
     assert unused == [], unused

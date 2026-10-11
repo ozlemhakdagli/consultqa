@@ -1,17 +1,30 @@
-// Turkish number, date and size formatting. Each formatter is created once, at load time.
-import { LOCALE } from "./config.js";
+// Number, date and size formatting in the page's current language. The formatters of a language
+// are created on first use and then reused.
+import { LOCALES } from "./config.js";
+import { currentLanguage } from "./i18n.js";
 
-const SECONDS = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 2 });
-const MEGABYTES = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 3 });
-const DATE_TIME = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
+const formatters = new Map();
+
+function formattersForLanguage() {
+  const language = currentLanguage();
+  if (!formatters.has(language)) {
+    const locale = LOCALES[language];
+    formatters.set(language, {
+      seconds: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+      megabytes: new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }),
+      dateTime: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }),
+    });
+  }
+  return formatters.get(language);
+}
 
 export function formatDateTime(iso) {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : DATE_TIME.format(date);
+  return Number.isNaN(date.getTime()) ? "" : formattersForLanguage().dateTime.format(date);
 }
 
 export function formatSeconds(ms) {
-  return SECONDS.format(ms / 1000);
+  return formattersForLanguage().seconds.format(ms / 1000);
 }
 
 // ".md" becomes "MD"; the order of the extensions is kept.
@@ -20,5 +33,5 @@ export function formatFileTypes(extensions) {
 }
 
 export function formatMegabytes(mb) {
-  return MEGABYTES.format(mb);
+  return formattersForLanguage().megabytes.format(mb);
 }

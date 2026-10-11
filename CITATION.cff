@@ -3,7 +3,7 @@ message: "If you use consultqa, please cite it using the metadata below."
 type: software
 title: "consultqa"
 version: 0.2.0
-license: MIT
+license: Apache-2.0
 abstract: "Question answering over uploaded documents with citations: hybrid retrieval, an evidence graph, reranking and an extractive or LLM reader."
 authors:
   - family-names: "Hakdağlı"

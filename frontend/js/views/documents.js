@@ -3,6 +3,7 @@
 // failed or duplicate upload.
 import { el, byId, setVisible, showMessage } from "../dom.js";
 import { t } from "../i18n.js";
+import { libraryLabel } from "../libraries.js";
 import { documentRows, rowStatusText, selectedCollection } from "../selectors.js";
 
 // A ready document is deleted in two steps: the first click asks, the second one deletes.
@@ -81,7 +82,7 @@ export function mountDocumentsView(store, actions) {
       const hasLibrary = state.selectedCollectionId !== "";
       const rows = documentRows(state);
       title.textContent = t("documents.listTitle", {
-        name: selectedCollection(state)?.name ?? "",
+        name: libraryLabel(selectedCollection(state)),
         count: state.documents.length,
       });
       setVisible(title, state.documents.length > 0);

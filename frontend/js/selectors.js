@@ -1,6 +1,7 @@
 // Pure functions over the state: what is selected, what can be used, and the reason when it cannot.
 import { errorMessage } from "./errors.js";
 import { t } from "./i18n.js";
+import { isDefaultLibrary } from "./libraries.js";
 
 export function selectedCollection(state) {
   return state.collections.find((collection) => collection.id === state.selectedCollectionId) ?? null;
@@ -9,7 +10,7 @@ export function selectedCollection(state) {
 // True when no folder is chosen yet or the chosen one is the default library.
 export function usesDefaultLibrary(state) {
   const chosen = selectedCollection(state);
-  return chosen === null || chosen.name === t("library.defaultName");
+  return chosen === null || isDefaultLibrary(chosen);
 }
 
 export function documentNames(state) {

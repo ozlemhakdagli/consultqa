@@ -126,10 +126,11 @@ def make_page(browser: Browser) -> Iterator[Callable[..., Page]]:
         height: int = 900,
         color_scheme: str = "light",
         reduced_motion: str = "no-preference",
+        locale: str = "tr-TR",
     ) -> Page:
         context = browser.new_context(
             viewport={"width": width, "height": height},
-            locale="tr-TR",
+            locale=locale,
             timezone_id="Europe/Istanbul",
             color_scheme=color_scheme,
             reduced_motion=reduced_motion,

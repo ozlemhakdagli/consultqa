@@ -179,7 +179,7 @@ class Services:
         return CollectionIndex(
             chunks,
             dense=dense,
-            sparse=SparseChannel(chunks),
+            sparse=SparseChannel(chunks, per_document_fold=True),
             graph=graph,
             scorer=self.scorer,
         )
@@ -277,7 +277,11 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
     interrupted = store.fail_unfinished_jobs(INTERRUPTED_ERROR)
     if interrupted:
         logger.warning("marked %d unfinished ingestion job(s) as interrupted", interrupted)
-    parser = get_parser(settings.parser, max_pages=settings.max_pages)
+    parser = get_parser(
+        settings.parser,
+        max_pages=settings.max_pages,
+        artifacts_path=settings.docling_artifacts,
+    )
 
     if settings.backend == "stub":
         encoder: Encoder = HashEncoder(64)

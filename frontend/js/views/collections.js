@@ -1,6 +1,7 @@
 // Folder view: the folder list, the form that creates one, and the message line of that form.
 import { el, byId, setVisible, showMessage } from "../dom.js";
 import { t } from "../i18n.js";
+import { libraryLabel } from "../libraries.js";
 import { selectedCollection, usesDefaultLibrary } from "../selectors.js";
 
 function renderOptions(select, { collections }) {
@@ -8,7 +9,7 @@ function renderOptions(select, { collections }) {
   const options = empty
     ? [el("option", { attrs: { value: "" }, text: t("collection.loading") })]
     : collections.map((collection) =>
-        el("option", { attrs: { value: collection.id }, text: collection.name }),
+        el("option", { attrs: { value: collection.id }, text: libraryLabel(collection) }),
       );
   select.replaceChildren(...options);
   select.disabled = collections.length === 0;
@@ -35,7 +36,7 @@ export function mountCollectionsView(store, actions) {
       setVisible(notice, other);
       if (other) {
         notice.textContent = t("library.notDefault", {
-          name: selectedCollection(state).name,
+          name: libraryLabel(selectedCollection(state)),
           default: t("library.defaultName"),
         });
       }

@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from consultqa.config import ABSTAIN_WORD
 from consultqa.generate.citations import parse_answer
 from consultqa.generate.prompt import build_messages
 from consultqa.models import Chunk
@@ -66,3 +67,25 @@ def test_citation_list_drops_out_of_range_numbers():
     parsed = parse_answer("Stok güncellendi [1, 9].", 2)
     assert parsed.citations == [1] and parsed.dropped == [9]
     assert "9" not in parsed.text and "[1]" in parsed.text
+
+
+def test_the_system_prompt_is_language_neutral():
+    system = build_messages("q", [_passage(1, "t")])[0]["content"]
+    assert "language of the question" in system and ABSTAIN_WORD in system
+    assert not re.search("[çğıöşüÇĞİÖŞÜ]", system.replace(ABSTAIN_WORD, ""))
+
+
+def test_the_question_is_labelled_in_english():
+    user = build_messages("How long?", [_passage(1, "x")])[-1]["content"]
+    assert user.startswith('Question: How long?\n\n<passage n="1">')
+
+
+def test_an_english_cited_answer_is_parsed():
+    parsed = parse_answer("Invoices are paid within 30 days [1].", 2)
+    assert parsed.text == "Invoices are paid within 30 days [1]."
+    assert parsed.citations == [1] and parsed.dropped == []
+
+
+@pytest.mark.parametrize("raw", ["bulunamadı", "BULUNAMADI", "Bulunamadı."])
+def test_the_abstain_word_is_detected_in_any_case(raw):
+    assert parse_answer(raw, 3).text is None

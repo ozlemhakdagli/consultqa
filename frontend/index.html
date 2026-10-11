@@ -15,7 +15,8 @@
 </head>
 <body class="booting">
   <noscript>
-    <p class="banner banner-warn">Bu sayfanın çalışması için JavaScript gerekir. Lütfen tarayıcınızda JavaScript'i açın.</p>
+    <p class="banner banner-warn" lang="tr">Bu sayfanın çalışması için JavaScript gerekir. Lütfen tarayıcınızda JavaScript'i açın.</p>
+    <p class="banner banner-warn" lang="en">This page needs JavaScript to work. Please turn on JavaScript in your browser.</p>
   </noscript>
   <header class="topbar">
     <div class="brand">
@@ -24,6 +25,17 @@
     </div>
     <div class="topbar-tools">
       <p id="system-chip" class="chip" role="status" hidden></p>
+      <fieldset id="language-switch" class="theme-switch language-switch">
+        <legend data-text="language.legend"></legend>
+        <label class="theme-option">
+          <input type="radio" name="language" value="tr">
+          <span lang="tr" data-text="language.tr"></span>
+        </label>
+        <label class="theme-option">
+          <input type="radio" name="language" value="en">
+          <span lang="en" data-text="language.en"></span>
+        </label>
+      </fieldset>
       <fieldset id="theme-switch" class="theme-switch" aria-describedby="theme-hint">
         <legend data-text="theme.legend"></legend>
         <label class="theme-option">

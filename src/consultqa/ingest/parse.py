@@ -6,9 +6,6 @@ Parsers raise ``ParseError`` with a stable code, and the ingestion job stores th
 from pathlib import Path
 from typing import Any, Protocol
 
-import fitz
-import pymupdf4llm
-
 
 class ParseError(Exception):
     """A document could not be parsed. ``code`` is one of the public parse error codes."""
@@ -46,52 +43,23 @@ class TextParser:
             raise ParseError("parse_failed") from exc
 
 
-class PyMuPDFParser:
-    """PDF text through pymupdf4llm. Text and Markdown files are read as UTF-8."""
-
-    name = "pymupdf4llm"
-    suffixes = frozenset({".pdf", ".txt", ".md"})
-
-    def __init__(self, max_pages: int) -> None:
-        self.max_pages = max_pages
-
-    def parse(self, path: Path) -> str:
-        _check_suffix(path, self.suffixes)
-        if path.suffix.lower() != ".pdf":
-            return TextParser().parse(path)
-        if _page_count(path) > self.max_pages:
-            raise ParseError("too_many_pages")
-        try:
-            return pymupdf4llm.to_markdown(str(path))
-        except Exception as exc:
-            raise ParseError("parse_failed") from exc
-
-
-def _page_count(path: Path) -> int:
-    """Return the page count of a readable, unencrypted PDF."""
-    try:
-        with fitz.open(str(path)) as doc:
-            locked = doc.needs_pass
-            pages = doc.page_count
-    except Exception as exc:
-        raise ParseError("parse_failed") from exc
-    if locked:
-        raise ParseError("parse_failed")
-    return pages
-
-
 class DoclingParser:
     """PDF, DOCX, PPTX and HTML through Docling, on the CPU.
 
-    Docling is imported on first use, so the default install does not need it. The converter is
-    built once per parser and reused. Any failure, including a missing install, becomes
-    ``parse_failed``.
+    Docling is imported on first use, so importing this module loads no model. The converter is
+    built once per parser and reused. A PDF with more than ``max_pages`` pages is rejected before
+    any page is converted, and a failure of any other kind becomes ``parse_failed``.
+
+    ``artifacts_path`` is the folder that holds the Docling models (``scripts/fetch_models.py``
+    fills it). When it is None, Docling reads them from the Hugging Face cache instead.
     """
 
     name = "docling"
     suffixes = frozenset({".pdf", ".docx", ".pptx", ".html"})
 
-    def __init__(self) -> None:
+    def __init__(self, max_pages: int, artifacts_path: Path | None = None) -> None:
+        self.max_pages = max_pages
+        self.artifacts_path = artifacts_path
         self._converter: Any = None
 
     def _get_converter(self) -> Any:
@@ -102,7 +70,8 @@ class DoclingParser:
             from docling.document_converter import DocumentConverter, PdfFormatOption
 
             pipeline = PdfPipelineOptions(
-                accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU)
+                accelerator_options=AcceleratorOptions(device=AcceleratorDevice.CPU),
+                artifacts_path=self.artifacts_path,
             )
             self._converter = DocumentConverter(
                 format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)}
@@ -112,14 +81,47 @@ class DoclingParser:
     def parse(self, path: Path) -> str:
         _check_suffix(path, self.suffixes)
         try:
-            result = self._get_converter().convert(str(path))
-            return result.document.export_to_markdown()
+            from docling.datamodel.base_models import ConversionStatus
+
+            # Docling checks the page count before it converts anything, and reports the count
+            # on the input even when it rejects the file, so the limit is enforced here.
+            result = self._get_converter().convert(
+                str(path), max_num_pages=self.max_pages, raises_on_error=False
+            )
+            pages = result.input.page_count
+            converted = result.status in (
+                ConversionStatus.SUCCESS,
+                ConversionStatus.PARTIAL_SUCCESS,
+            )
+            markdown = result.document.export_to_markdown() if converted else None
         except Exception as exc:
             raise ParseError("parse_failed") from exc
+        if pages > self.max_pages:
+            raise ParseError("too_many_pages")
+        if markdown is None:
+            raise ParseError("parse_failed")
+        return markdown
 
 
-def get_parser(name: str, *, max_pages: int) -> Parser:
-    """Return the parser registered under ``name``."""
-    if name == "pymupdf4llm":
-        return PyMuPDFParser(max_pages=max_pages)
+class DocumentParser:
+    """The service parser: PDF through Docling, Text and Markdown read as UTF-8."""
+
+    name = "docling"
+    suffixes = frozenset({".pdf", ".txt", ".md"})
+
+    def __init__(self, max_pages: int, artifacts_path: Path | None = None) -> None:
+        self._pdf = DoclingParser(max_pages=max_pages, artifacts_path=artifacts_path)
+        self._text = TextParser()
+
+    def parse(self, path: Path) -> str:
+        _check_suffix(path, self.suffixes)
+        if path.suffix.lower() == ".pdf":
+            return self._pdf.parse(path)
+        return self._text.parse(path)
+
+
+def get_parser(name: str, *, max_pages: int, artifacts_path: Path | None = None) -> Parser:
+    """Return the parser registered under ``name``. The only registered name is ``docling``."""
+    if name == "docling":
+        return DocumentParser(max_pages=max_pages, artifacts_path=artifacts_path)
     raise ValueError(f"unknown parser: {name!r}")

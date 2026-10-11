@@ -1,4 +1,4 @@
-// The client's error type and the Turkish text of every error code the page can show.
+// The client's error type and the text, in the page language, of every error code the page shows.
 import { has, t } from "./i18n.js";
 
 export class ApiError extends Error {

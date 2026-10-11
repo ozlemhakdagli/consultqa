@@ -5,8 +5,8 @@ Turkish letter in ``TURKISH_LETTERS``. The content is written in this file. It i
 must not contain private material.
 
 The PDFs embed a TrueType font, because the built-in PDF fonts cannot show İ, ı, Ş, ş, Ğ or ğ.
-The script looks for DejaVuSans.ttf in the usual Linux locations. Set ``CONSULTQA_SAMPLE_FONT`` to
-another TTF with Turkish glyphs to use a different font.
+By default it is the Vera font that reportlab bundles, which has every Turkish letter. Set
+``CONSULTQA_SAMPLE_FONT`` to another TTF with Turkish glyphs to use a different font.
 
 Usage, from the repository root::
 
@@ -16,14 +16,14 @@ Usage, from the repository root::
 import os
 from pathlib import Path
 
-import pymupdf
+import reportlab
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "data" / "sample" / "pdf"
-FONT_CANDIDATES = (
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/TTF/DejaVuSans.ttf",
-)
+BUNDLED_FONT = Path(reportlab.__file__).resolve().parent / "fonts" / "Vera.ttf"
 TURKISH_LETTERS = "İıŞşĞğÇçÖöÜü"
 
 PAGE_WIDTH = 595
@@ -133,58 +133,63 @@ DOCUMENTS: dict[str, tuple[str, list[tuple]]] = {
 
 
 def _find_font() -> Path:
-    candidates = [os.environ.get("CONSULTQA_SAMPLE_FONT", ""), *FONT_CANDIDATES]
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return Path(candidate)
-    raise SystemExit("no TTF font with Turkish glyphs found; set CONSULTQA_SAMPLE_FONT")
+    font = Path(os.environ.get("CONSULTQA_SAMPLE_FONT") or BUNDLED_FONT)
+    if not font.is_file():
+        raise SystemExit(f"font file not found: {font}; set CONSULTQA_SAMPLE_FONT")
+    return font
 
 
-def _draw_table(page: pymupdf.Page, top: float, header: list[str], rows: list[list[str]]) -> float:
+def _flip(y: float) -> float:
+    """Convert a distance from the top of the page into reportlab's bottom-up coordinate."""
+    return PAGE_HEIGHT - y
+
+
+def _draw_table(pdf: canvas.Canvas, top: float, header: list[str], rows: list[list[str]]) -> float:
     cells = [header, *rows]
     columns = len(header)
     width = (PAGE_WIDTH - 2 * MARGIN) / columns
+    pdf.setFont(FONT, TABLE_SIZE)
     for row_index, row in enumerate(cells):
         baseline = top + row_index * ROW_HEIGHT + 14
         for column_index, cell in enumerate(row):
             x = MARGIN + column_index * width + 4
-            page.insert_text((x, baseline), cell, fontname=FONT, fontsize=TABLE_SIZE)
+            pdf.drawString(x, _flip(baseline), cell)
     bottom = top + len(cells) * ROW_HEIGHT
     for row_index in range(len(cells) + 1):
         y = top + row_index * ROW_HEIGHT
-        page.draw_line((MARGIN, y), (MARGIN + columns * width, y))
+        pdf.line(MARGIN, _flip(y), MARGIN + columns * width, _flip(y))
     for column_index in range(columns + 1):
         x = MARGIN + column_index * width
-        page.draw_line((x, top), (x, bottom))
+        pdf.line(x, _flip(top), x, _flip(bottom))
     return bottom
 
 
 def _write_pdf(path: Path, title: str, blocks: list[tuple], font_file: Path) -> None:
-    doc = pymupdf.open()
-    page = doc.new_page(width=PAGE_WIDTH, height=PAGE_HEIGHT)
-    page.insert_font(fontname=FONT, fontfile=str(font_file))
+    pdfmetrics.registerFont(TTFont(FONT, str(font_file)))
+    pdf = canvas.Canvas(str(path), pagesize=(PAGE_WIDTH, PAGE_HEIGHT), pageCompression=1)
+    pdf.setTitle(title)
     y = float(MARGIN)
     for block in blocks:
         kind = block[0]
         if kind in HEADING_SIZES:
             size = HEADING_SIZES[kind]
             y += size + 4
-            page.insert_text((MARGIN, y), block[1], fontname=FONT, fontsize=size)
+            pdf.setFont(FONT, size)
+            pdf.drawString(MARGIN, _flip(y), block[1])
             y += 8
         elif kind == "p":
+            pdf.setFont(FONT, BODY_SIZE)
             for line in block[1]:
                 y += BODY_SIZE + 4
-                page.insert_text((MARGIN, y), line, fontname=FONT, fontsize=BODY_SIZE)
+                pdf.drawString(MARGIN, _flip(y), line)
             y += 8
         elif kind == "table":
-            y = _draw_table(page, y + 6, block[1], block[2]) + 12
+            y = _draw_table(pdf, y + 6, block[1], block[2]) + 12
         else:
             raise ValueError(f"unknown block kind: {kind}")
         if y > PAGE_HEIGHT - MARGIN:
             raise ValueError(f"{path.name} does not fit on one page")
-    doc.set_metadata({"title": title})
-    doc.save(path, deflate=True)
-    doc.close()
+    pdf.save()
 
 
 def _markdown(blocks: list[tuple]) -> str:

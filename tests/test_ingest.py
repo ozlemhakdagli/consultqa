@@ -7,7 +7,7 @@ import pytest
 
 from consultqa.api.jobs import JobRunner
 from consultqa.ingest import pipeline
-from consultqa.ingest.parse import PyMuPDFParser, TextParser
+from consultqa.ingest.parse import DocumentParser, TextParser
 from consultqa.ingest.pipeline import delete_document, ingest_file
 from consultqa.retrieve.dense import NumpyDenseBackend
 from consultqa.store.sqlite_store import SqliteStore
@@ -76,7 +76,7 @@ def test_corrupt_pdf_fails_with_code(tmp_path):
         job,
         col,
         "d1",
-        parser=PyMuPDFParser(max_pages=10),
+        parser=DocumentParser(max_pages=10),
     )
     assert store.get_job(job)["state"] == "failed"
     assert store.get_job(job)["error"] == "parse_failed"

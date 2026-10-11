@@ -90,7 +90,10 @@ class Settings:
     llm_model: str | None = None
     llm_api_key: str | None = None
     enable_paper_baseline: bool = False
-    parser: str = "pymupdf4llm"
+    parser: str = "docling"
+    # The folder with the Docling layout and table models (scripts/fetch_models.py). None means
+    # Docling reads them from the Hugging Face cache.
+    docling_artifacts: Path | None = None
     max_upload_mb: float = 20
     max_pages: int = 200
     chunk_max_tokens: int = 200
@@ -108,6 +111,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     base = Settings()
     state_dir = _value(source, "CONSULTQA_STATE_DIR")
     frontend_dir = _value(source, "CONSULTQA_FRONTEND_DIR")
+    docling_artifacts = _value(source, "CONSULTQA_DOCLING_ARTIFACTS")
     return Settings(
         backend=_value(source, "CONSULTQA_BACKEND") or base.backend,
         state_dir=Path(state_dir) if state_dir else base.state_dir,
@@ -117,6 +121,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         llm_api_key=_value(source, "CONSULTQA_LLM_API_KEY"),
         enable_paper_baseline=_value(source, "CONSULTQA_ENABLE_PAPER_BASELINE") == "1",
         parser=_value(source, "CONSULTQA_PARSER") or base.parser,
+        docling_artifacts=Path(docling_artifacts) if docling_artifacts else None,
         max_upload_mb=float(_value(source, "CONSULTQA_MAX_UPLOAD_MB") or base.max_upload_mb),
         max_pages=int(_value(source, "CONSULTQA_MAX_PAGES") or base.max_pages),
         chunk_max_tokens=int(_value(source, "CONSULTQA_CHUNK_MAX_TOKENS") or base.chunk_max_tokens),

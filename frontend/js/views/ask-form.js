@@ -14,23 +14,27 @@ export function mountAskView(store, actions) {
   const message = byId("ask-message");
   const examples = byId("example-list");
 
-  // An example fills the box but never asks: the user decides when a question is sent.
-  for (const key of EXAMPLE_KEYS) {
-    examples.append(
-      el("button", {
-        class: "example-button",
-        text: t(key),
-        attrs: { type: "button" },
-        on: {
-          click: () => {
-            question.value = t(key);
-            actions.ask.clearMessage();
-            question.focus();
+  // An example fills the box but never asks: the user decides when a question is sent. The buttons
+  // are built again on every language change, so they always read in the current language.
+  function renderExamples() {
+    examples.replaceChildren(
+      ...EXAMPLE_KEYS.map((key) =>
+        el("button", {
+          class: "example-button",
+          text: t(key),
+          attrs: { type: "button" },
+          on: {
+            click: () => {
+              question.value = t(key);
+              actions.ask.clearMessage();
+              question.focus();
+            },
           },
-        },
-      }),
+        }),
+      ),
     );
   }
+  store.subscribe(renderExamples, ["lang"]);
   question.addEventListener("input", () => actions.ask.clearMessage());
 
   store.subscribe(

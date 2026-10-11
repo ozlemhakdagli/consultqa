@@ -34,6 +34,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/models \
     HF_HUB_OFFLINE=1 \
+    CONSULTQA_DOCLING_ARTIFACTS=/models/docling \
     CONSULTQA_STATE_DIR=/app/state \
     CONSULTQA_FRONTEND_DIR=/app/frontend
 

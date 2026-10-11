@@ -1,5 +1,5 @@
-import fitz
 import pytest
+from pdf_fixtures import write_pdf
 
 from consultqa.eval.bakeoff import parser_scores
 from consultqa.ingest.parse import DoclingParser, ParseError, TextParser
@@ -67,7 +67,7 @@ def test_docling_rejects_unsupported_suffix_before_converting(tmp_path):
     path = tmp_path / "a.txt"
     path.write_text("metin", encoding="utf-8")
     with pytest.raises(ParseError) as info:
-        DoclingParser().parse(path)
+        DoclingParser(max_pages=10).parse(path)
     assert info.value.code == "unsupported_type"
 
 
@@ -76,10 +76,10 @@ def test_docling_conversion_error_becomes_parse_failed(tmp_path, monkeypatch):
     path.write_bytes(b"not a pdf")
 
     class _BrokenConverter:
-        def convert(self, _source):
+        def convert(self, _source, **_options):
             raise RuntimeError("conversion failed")
 
-    parser = DoclingParser()
+    parser = DoclingParser(max_pages=10)
     monkeypatch.setattr(parser, "_get_converter", lambda: _BrokenConverter())
     with pytest.raises(ParseError) as info:
         parser.parse(path)
@@ -88,9 +88,5 @@ def test_docling_conversion_error_becomes_parse_failed(tmp_path, monkeypatch):
 
 @pytest.mark.model
 def test_docling_extracts_text_from_a_text_pdf(tmp_path):
-    pytest.importorskip("docling")
-    path = tmp_path / "a.pdf"
-    doc = fitz.open()
-    doc.new_page().insert_text((72, 72), "Siparis modulu guncellendi")
-    doc.save(path)
-    assert "guncellendi" in DoclingParser().parse(path)
+    path = write_pdf(tmp_path / "a.pdf", [[("p", "Sipariş modülü güncellendi")]])
+    assert "güncellendi" in DoclingParser(max_pages=10).parse(path)

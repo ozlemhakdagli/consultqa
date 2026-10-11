@@ -27,6 +27,13 @@ def test_settings_defaults_are_safe():
     assert settings.qdrant_url is None
 
 
+def test_the_parser_defaults_to_docling_and_the_models_folder_is_read_from_the_environment():
+    assert load_settings({}).parser == "docling"
+    assert load_settings({}).docling_artifacts is None
+    settings = load_settings({"CONSULTQA_DOCLING_ARTIFACTS": "/models/docling"})
+    assert settings.docling_artifacts == Path("/models/docling")
+
+
 def test_frontend_dir_is_read_from_the_environment():
     assert load_settings({}).frontend_dir is None
     settings = load_settings({"CONSULTQA_FRONTEND_DIR": "/app/frontend"})
