@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.index
+.ipynb_checkpoints/
+*.egg-info/
+.ruff_cache/
+.env
+.env.*
+
+# Private material: never tracked, never copied into images
+private/
+data/raw/
+*.pdf
+.env
+.env.*
+!.env.example
+.claude/

@@ -1,0 +1,11 @@
+# Allowlist: nothing is sent to the build context unless listed below.
+*
+!src/
+!pyproject.toml
+!requirements*.txt
+!data/sample/
+
+# Byproducts of local runs
+**/__pycache__
+**/*.pyc
+**/*.egg-info

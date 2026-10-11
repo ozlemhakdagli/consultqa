@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install CPU torch, then the project with all extras
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
+          pip install -e ".[ml,pdf,dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - name: Tests
+        env:
+          HF_HUB_OFFLINE: "1"
+        run: pytest -q
