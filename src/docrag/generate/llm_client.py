@@ -11,8 +11,20 @@ class LLMUnavailable(Exception):
     """The LLM endpoint timed out, could not be reached, or returned an unusable reply."""
 
 
+def chat_endpoint(base_url: str) -> str:
+    """Return the chat completions URL for a base URL, with or without a trailing ``/v1``."""
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        root = root[: -len("/v1")]
+    return f"{root}/v1/chat/completions"
+
+
 class LLMClient:
-    """Posts chat requests to ``{base_url}/v1/chat/completions`` with temperature 0."""
+    """Posts chat requests to ``{base_url}/v1/chat/completions`` with temperature 0.
+
+    The base URL may end in ``/v1`` (as the Ollama and OpenAI client settings do); that suffix
+    is not repeated in the request path.
+    """
 
     def __init__(
         self,
@@ -23,7 +35,7 @@ class LLMClient:
         timeout_s: float = 60.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        self._url = f"{base_url.rstrip('/')}/v1/chat/completions"
+        self._url = chat_endpoint(base_url)
         self._model = model
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._timeout_s = timeout_s

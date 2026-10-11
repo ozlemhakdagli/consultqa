@@ -22,3 +22,23 @@ def test_empty_text_gives_no_chunks():
 def test_chunk_ids_are_positional():
     chunks = chunk_markdown("d1", "a\n\nb", max_tokens=1)
     assert [c.chunk_id for c in chunks] == ["d1#0", "d1#1"]
+
+
+# A shebang line is not a heading: a heading needs "#" marks, a space, then text.
+def test_shebang_line_is_not_a_heading():
+    chunks = chunk_markdown("d1", "#!/bin/bash\necho merhaba", max_tokens=50)
+    assert [c.heading_path for c in chunks] == [()]
+    assert chunks[0].text == "#!/bin/bash\necho merhaba"
+
+
+def test_hash_without_a_space_is_not_a_heading():
+    chunks = chunk_markdown("d1", "#Giriş\nmetin", max_tokens=50)
+    assert [c.heading_path for c in chunks] == [()]
+
+
+# An oversized unit without sentence ends is split by words, not kept whole.
+def test_oversized_sentence_less_unit_is_split_by_words():
+    text = " ".join(f"k{i}" for i in range(10))
+    chunks = chunk_markdown("d1", text, max_tokens=4)
+    assert [len(c.text.split()) for c in chunks] == [4, 4, 2]
+    assert " ".join(c.text for c in chunks) == text

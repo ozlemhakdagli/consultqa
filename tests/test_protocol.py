@@ -32,3 +32,17 @@ def test_load_protocol_reads_json(tmp_path):
     path = tmp_path / "protocol.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     assert load_protocol(path) == payload
+
+
+def test_default_preset_change_is_recorded_after_the_results():
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "experiments" / "protocol.json"
+    entries = load_protocol(path)["made_after_results"]
+    assert any(
+        entry["date"] == "2026-10-11"
+        and "L5" in entry["change"]
+        and "L2" in entry["change"]
+        and entry["measured_numbers_changed"] is False
+        for entry in entries
+    )

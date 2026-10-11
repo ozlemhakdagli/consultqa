@@ -34,3 +34,9 @@ def test_normalize_answer_ignores_trailing_punctuation():
 
 def test_normalize_answer_handles_none():
     assert normalize_answer(None) == ""
+
+
+# Canonically equivalent spellings casefold to the same text.
+def test_casefold_normalises_to_nfc_first():
+    assert casefold_tr("İ") == casefold_tr("İ") == "i"
+    assert casefold_tr("é") == casefold_tr("é")

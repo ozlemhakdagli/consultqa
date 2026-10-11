@@ -28,12 +28,16 @@ def ingest_file(
     collection_id: str,
     doc_id: str,
     path: Path,
+    filename: str,
     max_tokens: int,
     count_tokens: Callable[[str], int],
 ) -> None:
     """Index ``path`` as document ``doc_id``. The job ends in state ``done`` or ``failed``.
 
-    Identical content already in the collection ends the job as ``done`` without a new document.
+    ``path`` is the staged copy, whose name means nothing to the user; ``filename`` is the name
+    the user uploaded and is what the document is listed under. Identical content already in the
+    collection ends the job as ``done`` without a new document. Text with no chunks (an empty
+    file, or a PDF without text) ends the job as ``failed`` with ``no_text``.
     """
     vector_ids: list[str] = []
     document_written = False
@@ -51,11 +55,14 @@ def ingest_file(
             store.set_job(job_id, "done")
             return
         chunks = chunk_markdown(doc_id, text, max_tokens=max_tokens, count_tokens=count_tokens)
+        if not chunks:
+            store.set_job(job_id, "failed", "no_text")
+            return
         vector_ids = [chunk.chunk_id for chunk in chunks]
         store.set_job(job_id, "embedding")
         vectors = encoder.encode_passages([chunk.text for chunk in chunks])
         dense.upsert(vector_ids, vectors)
-        store.add_document(collection_id, doc_id, sha, path.name, chunks)
+        store.add_document(collection_id, doc_id, sha, filename, chunks)
         document_written = True
         store.set_job(job_id, "graph")
         _save_graph(store, collection_id)

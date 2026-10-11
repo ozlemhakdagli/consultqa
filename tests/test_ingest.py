@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from docrag.api.jobs import JobRunner
 from docrag.ingest import pipeline
@@ -27,6 +28,7 @@ def _run(store, dense, path: Path, job: str, col: str, doc: str, parser=None, en
         collection_id=col,
         doc_id=doc,
         path=path,
+        filename=path.name,
         max_tokens=50,
         count_tokens=_count,
     )
@@ -152,3 +154,44 @@ def test_duplicate_job_reports_the_existing_document(tmp_path):
     _run(store, dense, doc_file, job2, col, "second")
     assert store.get_job(job2)["state"] == "done"
     assert store.get_job(job2)["document_id"] == "first"
+
+
+# The stored document name is the name the user uploaded, never the staging name.
+def test_stored_filename_is_the_uploaded_name(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    staged = tmp_path / "3f9a2c1e.txt"
+    staged.write_text("Kılavuz metni", encoding="utf-8")
+    job = store.create_job(col, "d1")
+    ingest_file(
+        store=store,
+        parser=TextParser(),
+        encoder=HashEncoder(dim=64),
+        dense=NumpyDenseBackend(),
+        job_id=job,
+        collection_id=col,
+        doc_id="d1",
+        path=staged,
+        filename="Kılavuz Ocak.txt",
+        max_tokens=50,
+        count_tokens=_count,
+    )
+    assert store.get_job(job)["state"] == "done"
+    assert [d["filename"] for d in store.list_documents(col)] == ["Kılavuz Ocak.txt"]
+
+
+# A document with no chunks (an empty text file, or a PDF without text) is a failed job.
+@pytest.mark.parametrize("content", ["", "  \n\n \t"])
+def test_document_without_text_fails_as_no_text(tmp_path, content):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "bos.txt"
+    doc_file.write_text(content, encoding="utf-8")
+    job = store.create_job(col, "d1")
+    _run(store, dense, doc_file, job, col, "d1")
+    assert store.get_job(job)["state"] == "failed"
+    assert store.get_job(job)["error"] == "no_text"
+    assert store.list_documents(col) == []
+    assert store.list_chunks(col) == []
+    assert dense.search(np.ones(64, dtype=np.float32), k=5) == []

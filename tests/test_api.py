@@ -7,9 +7,10 @@ from fastapi.testclient import TestClient
 from docrag.api import services as services_module
 from docrag.api.app import create_app
 from docrag.api.jobs import JobRunner
-from docrag.api.services import build_services
+from docrag.api.services import DB_FILENAME, build_services
 from docrag.config import Settings
 from docrag.generate.llm_client import LLMClient
+from docrag.store.sqlite_store import SqliteStore
 
 TWO_SECTIONS = "# Sipariş\n\nSipariş modülü tablo filtreleme.\n\n# Stok\n\nStok modülü performans."
 
@@ -284,3 +285,77 @@ def test_unexpected_error_is_500_internal_error(services):
     r = client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L4"})
     assert r.status_code == 500
     assert r.json() == {"detail": "internal_error"}
+
+
+def test_upload_is_refused_until_the_models_are_ready(services):
+    services.ready.clear()
+    # No lifespan here, so the loader thread does not set the flag behind the test's back.
+    client = TestClient(create_app(services))
+    cid = _collection(client)
+    r = _upload(client, cid, TWO_SECTIONS)
+    assert r.status_code == 503
+    assert r.json() == {"detail": "not_ready"}
+    assert client.get(f"/api/collections/{cid}/documents").json() == []
+
+
+def test_stored_name_is_the_upload_name_and_never_the_staging_name(client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS, name="Ocak Kılavuzu.txt")
+    _upload(client, cid, "Başka metin", name="../../gizli/kaynak.md")
+    names = [d["filename"] for d in client.get(f"/api/collections/{cid}/documents").json()]
+    assert names == ["Ocak Kılavuzu.txt", "kaynak.md"]
+
+
+def test_declared_length_above_the_limit_is_413_before_the_body_is_read(client):
+    cid = _collection(client)
+    r = client.post(
+        f"/api/collections/{cid}/documents",
+        files={"file": ("a.txt", "kısa".encode(), "text/plain")},
+        headers={"Content-Length": str(10**9)},
+    )
+    assert r.status_code == 413
+    assert r.json() == {"detail": "file_too_large"}
+    assert client.get(f"/api/collections/{cid}/documents").json() == []
+
+
+class _UnreachableStore:
+    """A dense store whose server cannot be reached, as when Qdrant is down."""
+
+    def upsert(self, ids, vectors):
+        raise ConnectionError("refused")
+
+    def delete(self, ids):
+        raise ConnectionError("refused")
+
+    def search(self, vector, k):
+        raise ConnectionError("refused")
+
+
+def test_unreachable_vector_store_is_503_for_ask_and_delete(services, client):
+    cid = _collection(client)
+    _upload(client, cid, TWO_SECTIONS)
+    doc_id = client.get(f"/api/collections/{cid}/documents").json()[0]["id"]
+    # Drop the cached retrieval state, then point the service at the unreachable store.
+    services.invalidate(cid)
+    services.make_dense = lambda collection_id, dim: _UnreachableStore()
+    ask = client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L2"})
+    assert ask.status_code == 503
+    assert ask.json() == {"detail": "vector_store_unavailable"}
+    delete = client.delete(f"/api/collections/{cid}/documents/{doc_id}")
+    assert delete.status_code == 503
+    assert delete.json() == {"detail": "vector_store_unavailable"}
+
+
+def test_startup_marks_unfinished_jobs_as_interrupted(tmp_path):
+    store = SqliteStore(tmp_path / DB_FILENAME)
+    cid = store.create_collection("c")["id"]
+    stuck = store.create_job(cid, "d1")
+    store.set_job(stuck, "embedding")
+    queued = store.create_job(cid, "d2")
+    finished = store.create_job(cid, "d3")
+    store.set_job(finished, "done")
+    build_services(Settings(backend="stub", state_dir=tmp_path))
+    for job_id in (stuck, queued):
+        job = store.get_job(job_id)
+        assert job["state"] == "failed" and job["error"] == "interrupted"
+    assert store.get_job(finished)["state"] == "done"

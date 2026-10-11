@@ -45,6 +45,7 @@ PAPER_PRESET = "paper"
 DEFAULT_PRESET = "L2"
 DB_FILENAME = "docrag.sqlite3"
 QDRANT_COLLECTION_PREFIX = "docrag_"
+INTERRUPTED_ERROR = "interrupted"
 
 
 class Reader(Protocol):
@@ -270,6 +271,10 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
     """
     settings.state_dir.mkdir(parents=True, exist_ok=True)
     store = SqliteStore(settings.state_dir / DB_FILENAME)
+    # Jobs still open at startup belonged to a process that has stopped; they cannot finish.
+    interrupted = store.fail_unfinished_jobs(INTERRUPTED_ERROR)
+    if interrupted:
+        logger.warning("marked %d unfinished ingestion job(s) as interrupted", interrupted)
     parser = get_parser(settings.parser, max_pages=settings.max_pages)
 
     if settings.backend == "stub":

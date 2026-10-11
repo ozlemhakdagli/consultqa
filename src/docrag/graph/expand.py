@@ -35,16 +35,18 @@ def expand(
     for _ in range(iterations):
         mass = (1.0 - restart) * (transition @ mass) + restart * reset
 
-    ranked: list[tuple[float, str]] = []
+    ranked: list[tuple[float, Chunk]] = []
     for chunk_id in graph.chunk_ids:
         score = float(mass[graph.node_index[f"c:{chunk_id}"]])
-        if score > 0.0:
-            ranked.append((score, chunk_id))
+        # A graph node without a chunk in the map (a stale graph) is skipped, not an error.
+        chunk = chunks_by_id.get(chunk_id)
+        if score > 0.0 and chunk is not None:
+            ranked.append((score, chunk))
     # Python's sort is stable, so ties keep the graph's chunk order.
     ranked.sort(key=lambda item: -item[0])
     return [
-        Hit(chunk=chunks_by_id[chunk_id], score=score, score_type="ppr", channel="graph")
-        for score, chunk_id in ranked[:k]
+        Hit(chunk=chunk, score=score, score_type="ppr", channel="graph")
+        for score, chunk in ranked[:k]
     ]
 
 

@@ -113,19 +113,32 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     @router.post("/collections/{cid}/documents", status_code=202)
     def upload(cid: str, file: Annotated[UploadFile, File()]) -> dict[str, str]:
         """Accept an upload and start its ingestion job; the job reports the final state."""
+        # Ingestion needs the models, so nothing is accepted before they are loaded.
+        if not services.ready.is_set():
+            raise HTTPException(status_code=503, detail="not_ready")
         require_collection(cid)
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in services.parser.suffixes:
             raise HTTPException(status_code=415, detail="unsupported_type")
-        limit = int(services.settings.max_upload_mb * 1024 * 1024)
+        limit = upload_limit_bytes(services)
         # The job reads the staged file later, so the staging directory is removed by the job.
         staging = tempfile.TemporaryDirectory()
         try:
+            # The staged name is random; the name the user chose is kept for display only.
             path = Path(staging.name) / f"{uuid.uuid4().hex}{suffix}"
             _save_limited(file.file, path, limit)
             document_id = uuid.uuid4().hex
             job_id = services.store.create_job(cid, document_id)
-            services.jobs.submit(_ingest_job, services, cid, job_id, document_id, path, staging)
+            services.jobs.submit(
+                _ingest_job,
+                services,
+                cid,
+                job_id,
+                document_id,
+                path,
+                display_name(file.filename),
+                staging,
+            )
         except BaseException:
             staging.cleanup()
             raise
@@ -200,12 +213,27 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     return router
 
 
+def upload_limit_bytes(services: Services) -> int:
+    """The largest accepted upload, in bytes."""
+    return int(services.settings.max_upload_mb * 1024 * 1024)
+
+
+def display_name(raw: str | None) -> str:
+    """The name to show for an upload: its last path component, or ``upload`` if none is left.
+
+    Both separators are treated as path separators, so a client cannot store a directory part.
+    """
+    name = Path((raw or "").replace("\\", "/")).name
+    return name if name not in ("", ".", "..") else "upload"
+
+
 def _ingest_job(
     services: Services,
     cid: str,
     job_id: str,
     document_id: str,
     path: Path,
+    filename: str,
     staging: tempfile.TemporaryDirectory,
 ) -> None:
     """Run one ingestion job, then drop the cached retrieval state and the staged upload."""
@@ -219,6 +247,7 @@ def _ingest_job(
             collection_id=cid,
             doc_id=document_id,
             path=path,
+            filename=filename,
             max_tokens=services.settings.chunk_max_tokens,
             count_tokens=services.count_tokens,
         )

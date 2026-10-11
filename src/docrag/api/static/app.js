@@ -1,6 +1,8 @@
 // docrag page logic. Every string from the server is written with textContent.
 
 const POLL_MS = 1000;
+// 300 polls of one second: a job still running after five minutes stops being polled.
+const MAX_POLLS = 300;
 const DEFAULT_PRESET = "L2";
 
 const MESSAGES = {
@@ -16,6 +18,9 @@ const MESSAGES = {
   preset_unavailable: "That method is not available on this server.",
   unknown_preset: "Unknown method.",
   parse_failed: "The file could not be read. It may be corrupt or not text.",
+  no_text: "The file has no text to index.",
+  interrupted: "The server restarted before indexing finished. Upload the file again.",
+  vector_store_unavailable: "The vector store is not reachable. Try again in a moment.",
   too_many_pages: "The file has more pages than the server accepts.",
   internal_error: "Something went wrong on the server.",
   network_error: "The service could not be reached.",
@@ -125,9 +130,9 @@ function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Poll the ingestion job once a second until it reaches done or failed.
+// Poll the ingestion job once a second until it reaches done or failed, at most MAX_POLLS times.
 async function pollJob(jobId, status) {
-  for (;;) {
+  for (let poll = 1; poll <= MAX_POLLS; poll += 1) {
     const result = await request(`/api/jobs/${encodeURIComponent(jobId)}`);
     if (!result.ok) {
       show(status, messageFor(errorCode(result)));
@@ -145,6 +150,7 @@ async function pollJob(jobId, status) {
     show(status, JOB_LABELS[state] || state);
     await pause(POLL_MS);
   }
+  show(status, "Still working after five minutes. Reload the page later to see whether the document was added.");
 }
 
 $("upload-form").addEventListener("submit", async (event) => {

@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from docrag.models import Chunk
 
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+# A heading is one or more "#" marks, a space, then text. "#!/bin/bash" is not a heading.
+_HEADING = re.compile(r"^(#+)[ \t]+(\S.*)$")
 _PARAGRAPH_SEP = "\n\n"
 _SENTENCE_SEP = " "
 
@@ -31,12 +33,12 @@ def _blocks(text: str) -> Iterator[str | _Heading]:
     lines: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
-        if line.startswith("#"):
+        heading = _HEADING.match(line)
+        if heading is not None:
             if lines:
                 yield "\n".join(lines)
                 lines = []
-            stripped = line.lstrip("#")
-            yield _Heading(level=len(line) - len(stripped), title=stripped.strip())
+            yield _Heading(level=len(heading.group(1)), title=heading.group(2).strip())
         elif line:
             lines.append(line)
         elif lines:
@@ -64,12 +66,31 @@ def _sections(text: str) -> list[tuple[tuple[str, ...], list[str]]]:
     return sections
 
 
+def _split_by_words(text: str, max_tokens: int, count_tokens: Callable[[str], int]) -> list[str]:
+    """Split one unit above the budget into runs of whole words, each within the budget.
+
+    A single word above the budget is kept whole, since words are not cut.
+    """
+    if count_tokens(text) <= max_tokens:
+        return [text]
+    runs: list[str] = []
+    current: list[str] = []
+    for word in text.split():
+        if current and count_tokens(" ".join([*current, word])) > max_tokens:
+            runs.append(" ".join(current))
+            current = []
+        current.append(word)
+    if current:
+        runs.append(" ".join(current))
+    return runs
+
+
 def _pack(
     units: list[str], sep: str, max_tokens: int, count_tokens: Callable[[str], int]
 ) -> list[str]:
     """Join consecutive units while the joined text stays within ``max_tokens``.
 
-    A single unit above the budget is kept whole rather than cut mid-word.
+    Units are assumed to fit the budget on their own; ``_pack_section`` splits the ones that do not.
     """
     packed: list[str] = []
     current: list[str] = []
@@ -94,7 +115,11 @@ def _pack_section(
         if count_tokens(paragraph) > max_tokens:
             texts.extend(_pack(pending, _PARAGRAPH_SEP, max_tokens, count_tokens))
             pending = []
-            sentences = _SENTENCE_BOUNDARY.split(paragraph)
+            sentences = [
+                run
+                for sentence in _SENTENCE_BOUNDARY.split(paragraph)
+                for run in _split_by_words(sentence, max_tokens, count_tokens)
+            ]
             texts.extend(_pack(sentences, _SENTENCE_SEP, max_tokens, count_tokens))
         else:
             pending.append(paragraph)

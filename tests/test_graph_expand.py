@@ -29,3 +29,13 @@ def test_full_restart_returns_only_the_reset_mass():
 def test_no_seeds_and_no_terms_returns_nothing():
     graph, chunks = _setup()
     assert expand(graph, {}, [], chunks, restart=0.7, k=5) == []
+
+
+# A chunk id in the graph but missing from the chunk map is skipped, not a KeyError.
+def test_chunk_ids_missing_from_the_chunk_map_are_skipped():
+    graph, chunks = _setup()
+    del chunks["d1#1"]
+    hits = expand(graph, {"d1#0": 1.0}, ["stok"], chunks, restart=0.7, k=5)
+    ids = [h.chunk.chunk_id for h in hits]
+    assert ids and "d1#1" not in ids
+    assert all(chunk_id in chunks for chunk_id in ids)

@@ -209,6 +209,20 @@ class SqliteStore:
                 (state, error, _now(), job_id),
             )
 
+    def fail_unfinished_jobs(self, error: str) -> int:
+        """Mark every job that is not finished (queued, parsing, embedding or graph) as failed.
+
+        Called at startup: a job still running when the process stopped will never finish.
+        Returns the number of jobs marked.
+        """
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET state = 'failed', error = ?, updated_at = ?"
+                " WHERE state IN ('queued', 'parsing', 'embedding', 'graph')",
+                (error, _now()),
+            )
+            return cur.rowcount
+
     def set_job_document(self, job_id: str, document_id: str) -> None:
         """Point a job at a document. A duplicate upload points at the document it matched."""
         with self._connect() as conn:

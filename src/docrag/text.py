@@ -2,6 +2,7 @@
 
 import re
 import string
+import unicodedata
 
 _NON_ALNUM = re.compile(r"[\W_]+")
 _EDGE_CHARS = string.punctuation + "“”„‟‘’‚«»" + " "
@@ -10,8 +11,11 @@ _EDGE_CHARS = string.punctuation + "“”„‟‘’‚«»" + " "
 def casefold_tr(text: str) -> str:
     """Lowercase text with Turkish rules: dotted İ becomes i, dotless I becomes ı.
 
-    The substitutions run before ``str.lower()``, which would otherwise map I to i.
+    The text is first put in Unicode NFC form, so that a decomposed spelling ("I" plus a
+    combining dot, or "e" plus a combining acute) matches the precomposed one. The substitutions
+    then run before ``str.lower()``, which would otherwise map I to i.
     """
+    text = unicodedata.normalize("NFC", text)
     return text.replace("İ", "i").replace("I", "ı").lower()
 
 

@@ -46,3 +46,34 @@ def test_real_bge_m3_encoder_dimension():
 
     vector = SentenceEncoder(ENCODER_SPECS["bge-m3"]).encode_query("sipariş")
     assert vector.shape == (1024,)
+
+
+# The background loader and the ingest worker may both ask for the model: it is built once.
+def test_concurrent_loads_build_the_model_once():
+    import threading
+    import time
+
+    from docrag.retrieve.dense import ENCODER_SPECS, SentenceEncoder
+
+    built: list[tuple[str, str]] = []
+
+    def loader(model_id, revision):
+        built.append((model_id, revision))
+        time.sleep(0.05)  # widen the window in which a second load could start
+        return object()
+
+    encoder = SentenceEncoder(ENCODER_SPECS["bge-m3"], loader=loader)
+    barrier = threading.Barrier(8)
+    models: list[object] = []
+
+    def load():
+        barrier.wait()
+        models.append(encoder._load())
+
+    threads = [threading.Thread(target=load) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert len(built) == 1
+    assert len({id(model) for model in models}) == 1 and len(models) == 8

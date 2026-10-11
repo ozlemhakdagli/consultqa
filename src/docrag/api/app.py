@@ -1,5 +1,6 @@
 """FastAPI application factory for the docrag API."""
 
+import re
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,17 +12,53 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from docrag.api.routes import build_router
+from docrag.api.routes import build_router, upload_limit_bytes
 from docrag.api.services import Services, build_services, load_in_background
 from docrag.config import load_settings
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+_UPLOAD_PATH = re.compile(r"^/api/collections/[^/]+/documents$")
 
 
 def _error(status_code: int, code: str) -> JSONResponse:
     """Return an error response whose body is the single error code."""
     return JSONResponse(status_code=status_code, content={"detail": code})
+
+
+class DeclaredLengthLimit:
+    """Refuse an upload whose Content-Length header is above the limit, before its body is read.
+
+    FastAPI parses a form body before any route code runs, so the check has to sit in front of
+    the application. A body with no usable length header is left to the streaming check in the
+    upload route.
+    """
+
+    def __init__(self, app: ASGIApp, limit_bytes: int) -> None:
+        self.app = app
+        self.limit_bytes = limit_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope["method"] == "POST"
+            and _UPLOAD_PATH.match(scope["path"])
+        ):
+            declared = _declared_length(scope)
+            if declared is not None and declared > self.limit_bytes:
+                await _error(413, "file_too_large")(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+def _declared_length(scope: Scope) -> int | None:
+    """The Content-Length of a request as an integer, or None when absent or not a number."""
+    for name, value in scope["headers"]:
+        if name == b"content-length":
+            text = value.decode("latin-1").strip()
+            return int(text) if text.isdigit() else None
+    return None
 
 
 def create_app(services: Services | None = None) -> FastAPI:
@@ -36,6 +73,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         yield
 
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(DeclaredLengthLimit, limit_bytes=upload_limit_bytes(services))
     semaphore = threading.BoundedSemaphore(1)
     app.state.inference_semaphore = semaphore
     app.include_router(build_router(services, semaphore))
@@ -58,6 +96,11 @@ def create_app(services: Services | None = None) -> FastAPI:
         if isinstance(detail, str) and detail == phrase:
             detail = detail.lower().replace(" ", "_")
         return JSONResponse(status_code=exc.status_code, content={"detail": detail})
+
+    @app.exception_handler(ConnectionError)
+    async def unreachable_handler(_: Request, __: ConnectionError) -> JSONResponse:
+        """A vector store that cannot be reached is an outage, not a bug: answer 503 and retry."""
+        return _error(503, "vector_store_unavailable")
 
     @app.exception_handler(Exception)
     async def unexpected_handler(_: Request, __: Exception) -> JSONResponse:

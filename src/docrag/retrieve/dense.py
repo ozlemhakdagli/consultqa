@@ -1,6 +1,7 @@
 """Dense retrieval: sentence encoders, an exact numpy vector index and the dense channel."""
 
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -131,21 +132,38 @@ ENCODER_SPECS: dict[str, EncoderSpec] = {
 }
 
 
-class SentenceEncoder:
-    """A pinned sentence-transformers model, loaded on first use."""
+def _sentence_transformer(model_id: str, revision: str) -> Any:
+    """Build the pinned sentence-transformers model. Imported here, so that importing this module
+    does not load the ML stack."""
+    from sentence_transformers import SentenceTransformer
 
-    def __init__(self, spec: EncoderSpec) -> None:
+    return SentenceTransformer(model_id, revision=revision)
+
+
+class SentenceEncoder:
+    """A pinned sentence-transformers model, loaded on first use.
+
+    The background loader and the ingest worker can ask for the model at the same time, so the
+    load runs under a lock and the model is built once.
+    """
+
+    def __init__(
+        self,
+        spec: EncoderSpec,
+        *,
+        loader: Callable[[str, str], Any] = _sentence_transformer,
+    ) -> None:
         self._spec = spec
+        self._loader = loader
         self._model: Any = None
+        self._load_lock = threading.Lock()
 
     def _load(self) -> Any:
-        if self._model is None:
-            # Deferred so that importing this module does not load the ML stack.
-            from sentence_transformers import SentenceTransformer
-
-            model_id, revision = MODEL_PINS[self._spec.model_key]
-            self._model = SentenceTransformer(model_id, revision=revision)
-        return self._model
+        with self._load_lock:
+            if self._model is None:
+                model_id, revision = MODEL_PINS[self._spec.model_key]
+                self._model = self._loader(model_id, revision)
+            return self._model
 
     def _encode(self, texts: list[str]) -> np.ndarray:
         model = self._load()
