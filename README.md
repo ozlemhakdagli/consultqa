@@ -1,8 +1,8 @@
 # docrag
 
-docrag answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine.
+docrag answers questions about your documents and shows the passage each answer comes from. You upload PDF, TXT or Markdown files, ask a question in Turkish, and get the answer with its source text. Everything runs locally in Docker; documents never leave your machine, unless you configure an external LLM endpoint.
 
-**Özet (Türkçe).** docrag, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Ölçümlerde en iyi sonucu veren yöntem hibrit aramadır (L2). Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır.
+**Özet (Türkçe).** docrag, yüklediğiniz belgelerde soru sorup kaynak metinle birlikte cevap almanızı sağlar. Belgeler, harici bir LLM uç noktası yapılandırmadığınız sürece yalnızca kendi bilgisayarınızdaki Docker servislerinde işlenir. Şu an cevaplar belgeden seçilen kısa kesitlerdir; daha açıklayıcı, üretken cevaplar için dil modeli bağlı değildir. Test bölümünde hibrit arama (L2), yayımlanan yöntemin yeniden çalıştırılmasına (L0) göre belirgin biçimde daha iyidir; sonraki aşamalar L2'yi geçmemiştir. Bu projenin ölçüm sonuçları sentetik bir örnek veri üzerindedir ve aşağıda ayrıntılı olarak anlatılmıştır.
 
 ## Status
 
@@ -20,13 +20,14 @@ docrag answers questions about your documents and shows the passage each answer 
 
 **What we observed on this data.**
 
-- In the concatenation, dense hits fill the first five positions, so the BM25 hits fall beyond the cut whenever the dense list already has five distinct passages. The reader reads only the first passage. On this sample, BM25 did not change the answer of L0.
-- The exact-match and F1 scores depend on how case, punctuation and repeated tokens are normalised. Scoring the same predictions with Turkish-aware normalisation and multiset F1 raises L0's EM from 0.117 to 0.193 (L1). This is a change of measurement, not of the system.
+- In the concatenation, dense hits take positions 1 to 5 and BM25 hits follow at 6 to 10 (a repeated passage is listed once). BM25 therefore adds to L0's ranking but not to its answer, because the reader reads only the first passage, which is the top dense hit. On this sample, BM25 did not change L0's answer.
+- The exact-match and F1 scores depend on how case, punctuation and repeated tokens are normalised. Scoring the same predictions with Turkish-aware normalisation raises L0's EM from 0.117 to 0.193 and its F1 from 0.224 to 0.429 (L1). The EM rise comes from normalisation; multiset F1 does not change EM. This is a change of measurement, not of the system.
 
 **What we changed, and why.**
 
-- **Reciprocal rank fusion (RRF)** replaces the concatenation. Both channels now contribute to the ranking, so BM25 can move a passage up. The aim was to let the keyword channel change the result.
-- **Turkish text handling.** Casefolding maps `I` to `ı` and `İ` to `i`, and BM25 matches five-character stems. Python's default lowercasing mishandles the Turkish capital I, and Turkish inflection is heavy.
+- **Reciprocal rank fusion (RRF)** replaces the concatenation. RRF interleaves the two lists by rank, so a passage that BM25 ranks highly can reach the top and the reader. The aim was to let the keyword channel change the result.
+- **Deeper candidate lists.** Each channel supplies 50 candidates to the fusion, against 5 per channel in the published pipeline.
+- **Turkish text handling.** Casefolding maps `I` to `ı` and `İ` to `i`, and BM25 matches five-character prefixes. Python's default lowercasing mishandles the Turkish capital I, and Turkish inflection is heavy.
 - **A multilingual encoder (BGE-M3)** replaces the English-trained sentence encoder, because the documents are Turkish. We did not isolate this change from the fusion change.
 - **A corrected metric (L1)**, applied to the same predictions, as described above.
 
@@ -34,7 +35,7 @@ docrag answers questions about your documents and shows the passage each answer 
 
 **What we tried beyond the paper and did not keep.** A cross-encoder reranker, neighbouring passages and an evidence graph. None improved on L2 on the test split. They remain available as presets and are off by default.
 
-**What we did not reproduce.** We could not reproduce the paper's headline EM and F1 on our sample, and we do not compare our figures with them: the data differ, so the comparison would not be like for like. Everything in this README compares our own re-run (L0) with our changes.
+**What we did not reproduce.** We did not reproduce the paper's headline EM and F1. Its data are not public, so the figures are not comparable with ours. Everything in this README compares our own re-run (L0) with our changes.
 
 **What the service adds.** Things the paper does not describe: an upload service with background ingestion jobs, answers that show the whole source passage with the answer sentence marked, a Turkish page for non-technical users, and a Docker deployment.
 
@@ -50,8 +51,8 @@ docker compose build app
 
 # 2. Copy the four cached models into the models volume (skip if you use step 2b)
 MODELS="models--BAAI--bge-m3 models--BAAI--bge-reranker-v2-m3 models--deepset--xlm-roberta-large-squad2 models--sentence-transformers--multi-qa-mpnet-base-dot-v1"
-docker run --rm -v docrag_models:/models -v "$HOME/.cache/huggingface/hub:/src:ro" \
-  --entrypoint sh docrag:dev -c "mkdir -p /models/hub && for m in $MODELS; do cp -r /src/\$m /models/hub/; done"
+docker compose --profile setup run --rm --no-deps -v "$HOME/.cache/huggingface/hub:/src:ro" \
+  --entrypoint sh fetch-models -c "mkdir -p /models/hub && for m in $MODELS; do cp -r /src/\$m /models/hub/; done"
 
 # 2b. Without a cache, download the same revisions into the volume (about 9 GB)
 #     docker compose --profile setup run --rm fetch-models
@@ -59,6 +60,8 @@ docker run --rm -v docrag_models:/models -v "$HOME/.cache/huggingface/hub:/src:r
 # 3. Start the app and Qdrant; --wait returns when the app is healthy
 DOCRAG_BACKEND=real docker compose up -d --wait app
 ```
+
+The paper baseline's embedder may be a symlink in the Hugging Face cache, which `cp -r` copies as a dangling link; if the copy reports a missing file for it, fetch the models with `fetch-models` (step 2b) instead.
 
 Then open **http://127.0.0.1:8000/**. To check the service without downloading models, run `make smoke`. It starts the app with the stub backend and checks `/api/ready`; it replaces a running real-backend app container, so start the real backend again with step 3 afterwards.
 
@@ -99,7 +102,7 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
 
 ## Results
 
-All numbers are on the public synthetic sample in `data/sample/`. Intervals are 95% cluster bootstrap intervals (2000 resamples, seed 0). Differences are paired per question. MRR@10 is the primary metric.
+All numbers are on the public synthetic sample in `data/sample/`. Intervals are 95% cluster bootstrap intervals (2000 resamples, seed 0). Differences are paired per question. MRR@10 is the primary metric. The ladder run headers record git HEAD `5aa0bee` with `dirty` set to true, so the runs were made from a working tree with uncommitted changes.
 
 | Rung | Content |
 |---|---|
@@ -146,7 +149,7 @@ On dev, L2 scores 0.507 MRR@10 and L5 scores 0.535. The graph parameters were ch
 
 ### Bake-offs (dev split; the owner has not yet reviewed them)
 
-**Parser** (`experiments/results/bakeoff-parser.md`). Three synthetic text-layer PDFs (n = 3, so anecdotal). Both parsers scored 1.000 on word F1 and heading recall. The tie went to the faster one, `pymupdf4llm` (0.28 s per file, against 3.87 s for `docling` including its first model load). The default is unchanged.
+**Parser** (`experiments/results/bakeoff-parser.md`). Three synthetic text-layer PDFs (n = 3, so anecdotal), run on the CPU. Both parsers scored 1.000 on word F1 and heading recall. The tie went to the faster one, `pymupdf4llm` (0.28 s per file, against 3.87 s for `docling` including its first model load). The default is unchanged.
 
 **Embedder** (`experiments/results/bakeoff-embedder.md`). Dense retrieval only, top 20. The rule picks `e5-large-instruct`, but its gain over `bge-m3` is +0.0135 [-0.0372, +0.0672], which includes zero. The default stays `bge-m3` until the owner reviews the table.
 
@@ -206,7 +209,7 @@ make reproduce   # verifies the protocol hashes, then re-runs the dev and test l
 
 Browser tests need the `e2e` extra and Google Chrome: `pip install -e ".[e2e]"`, then `pytest -m e2e`. Tests that need real weights are marked `model`: `pytest -m model`.
 
-The protocol ordering is evidenced by git only through file timestamps and the file hashes in `experiments/protocol.json`. `make reproduce` checks those hashes first, so a changed sample file stops the run before any number is written.
+The protocol ordering is evidenced by the file hashes in `experiments/protocol.json` and by the run headers. Git does not record file timestamps. `make reproduce` checks those hashes first, so a changed sample file stops the run before any number is written.
 
 ## The published method
 

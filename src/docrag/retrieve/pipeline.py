@@ -33,10 +33,6 @@ class RetrievalResult:
     hits: list[Hit]
     trace: list[TraceEntry]
 
-    def final(self, n: int) -> list[Hit]:
-        """Return the best ``n`` hits of the ranked pool."""
-        return self.hits[:n]
-
 
 def _trace(stage: str, hits: Sequence[Hit]) -> list[TraceEntry]:
     """Return one entry per hit, with 1-based ranks in the order given."""

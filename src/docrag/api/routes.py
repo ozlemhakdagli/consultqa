@@ -51,10 +51,14 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     """Return the ``/api`` router for ``services``, sharing ``semaphore`` for inference calls."""
     router = APIRouter(prefix="/api")
 
-    def run_inference(call: Callable[[], ResultT]) -> ResultT:
-        """Run one inference call under the semaphore, refusing when busy."""
+    def require_ready() -> None:
+        """Refuse a call made before the models have loaded."""
         if not services.ready.is_set():
             raise HTTPException(status_code=503, detail="not_ready")
+
+    def run_inference(call: Callable[[], ResultT]) -> ResultT:
+        """Run one inference call under the semaphore, refusing when busy."""
+        require_ready()
         if not semaphore.acquire(blocking=False):
             raise HTTPException(status_code=429, detail="busy")
         try:
@@ -146,8 +150,7 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     def upload(cid: str, file: Annotated[UploadFile, File()]) -> dict[str, str]:
         """Accept an upload and start its ingestion job; the job reports the final state."""
         # Ingestion needs the models, so nothing is accepted before they are loaded.
-        if not services.ready.is_set():
-            raise HTTPException(status_code=503, detail="not_ready")
+        require_ready()
         require_collection(cid)
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in services.parser.suffixes:
@@ -194,6 +197,7 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     @router.delete("/collections/{cid}/documents/{doc_id}", status_code=204)
     def remove_document(cid: str, doc_id: str) -> Response:
         """Delete a document with its vectors, chunks and graph rows."""
+        require_ready()
         require_collection(cid)
         deleted = delete_document(
             store=services.store, dense=services.dense(cid), collection_id=cid, doc_id=doc_id

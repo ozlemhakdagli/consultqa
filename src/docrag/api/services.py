@@ -144,6 +144,7 @@ class Services:
     count_tokens: Callable[[str], int]
     _indexes: dict[str, CollectionIndex] = field(default_factory=dict, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _dim: int | None = field(default=None, init=False, repr=False)
 
     def invalidate(self, cid: str) -> None:
         """Drop the retrieval state of a collection; the next question rebuilds it."""
@@ -151,9 +152,10 @@ class Services:
             self._indexes.pop(cid, None)
 
     def dense(self, cid: str) -> DenseBackend:
-        """The dense store of one collection."""
-        dim = int(self.encoder.encode_query("dimension").shape[0])
-        return self.make_dense(cid, dim)
+        """The dense store of one collection. The encoder runs once, to learn the dimension."""
+        if self._dim is None:
+            self._dim = int(self.encoder.encode_query("dimension").shape[0])
+        return self.make_dense(cid, self._dim)
 
     def index(self, cid: str) -> CollectionIndex:
         """The retrieval state of a collection. Holding the lock while building keeps an

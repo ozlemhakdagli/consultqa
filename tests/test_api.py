@@ -1,6 +1,7 @@
 """HTTP API with the stub backend: error contract, ingestion, questions and passage search."""
 
 import httpx
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -359,3 +360,75 @@ def test_startup_marks_unfinished_jobs_as_interrupted(tmp_path):
         job = store.get_job(job_id)
         assert job["state"] == "failed" and job["error"] == "interrupted"
     assert store.get_job(finished)["state"] == "done"
+
+
+# The upload limit in the next tests is a quarter of a megabyte, so the files stay small.
+UPLOAD_LIMIT = 256 * 1024
+
+
+@pytest.fixture
+def small_limit_client(tmp_path):
+    settings = Settings(backend="stub", state_dir=tmp_path, max_upload_mb=UPLOAD_LIMIT / 2**20)
+    svc = build_services(settings, jobs=JobRunner(synchronous=True))
+    svc.ready.set()
+    with TestClient(create_app(svc)) as c:
+        yield c
+
+
+@pytest.mark.parametrize("margin", [1024, 100])
+def test_file_just_under_the_limit_is_accepted(small_limit_client, margin):
+    # The multipart wrapper adds a few hundred bytes to Content-Length, so a file 100 bytes
+    # under the limit used to be refused.
+    cid = _collection(small_limit_client)
+    text = ("Stok performans. " * (UPLOAD_LIMIT // 17 + 1))[: UPLOAD_LIMIT - margin]
+    r = _upload(small_limit_client, cid, text)
+    assert r.status_code == 202
+
+
+def test_file_one_byte_over_the_limit_is_413(small_limit_client):
+    cid = _collection(small_limit_client)
+    r = _upload(small_limit_client, cid, "a" * (UPLOAD_LIMIT + 1))
+    assert r.status_code == 413
+    assert r.json() == {"detail": "file_too_large"}
+
+
+@pytest.mark.parametrize("host", ["localhost:8000", "127.0.0.1:8000", "testserver"])
+def test_loopback_hosts_reach_the_api(client, host):
+    assert client.get("/api/health", headers={"host": host}).status_code == 200
+
+
+def test_foreign_host_is_refused(client):
+    # A page that rebinds its own domain to 127.0.0.1 sends its domain as the Host header.
+    assert client.get("/api/health", headers={"host": "evil.example"}).status_code == 400
+
+
+def test_delete_is_refused_until_the_models_are_ready(services):
+    client = TestClient(create_app(services))
+    cid = _collection(client)
+    services.ready.clear()
+    r = client.delete(f"/api/collections/{cid}/documents/missing")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "not_ready"}
+
+
+class CountingEncoder:
+    """Stands in for the sentence encoder and counts the calls made to learn the dimension."""
+
+    def __init__(self, dim: int) -> None:
+        self.dim = dim
+        self.calls = 0
+
+    def encode_query(self, text: str) -> np.ndarray:
+        self.calls += 1
+        return np.zeros(self.dim, dtype=np.float32)
+
+
+def test_dimension_is_learnt_by_one_encoder_call(services):
+    encoder = CountingEncoder(dim=8)
+    dims: list[int] = []
+    services.encoder = encoder
+    services.make_dense = lambda cid, dim: dims.append(dim)
+    services.dense("c1")
+    services.dense("c2")
+    assert encoder.calls == 1
+    assert dims == [8, 8]

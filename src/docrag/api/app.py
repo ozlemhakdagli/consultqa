@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -35,6 +36,12 @@ PAGE_HEADERS = {
     "Cache-Control": "no-cache",
 }
 _UPLOAD_PATH = re.compile(r"^/api/collections/[^/]+/documents$")
+# A Content-Length covers the whole multipart body, so the file limit gets this much room for the
+# boundaries and part headers. The streaming check in the upload route still counts file bytes only.
+MULTIPART_ALLOWANCE_BYTES = 64 * 1024
+# Only the loopback names and the test client's host are served, so a page on another domain cannot
+# reach the API through DNS rebinding.
+TRUSTED_HOSTS = ["localhost", "127.0.0.1", "testserver"]
 
 
 class FrontendFiles(StaticFiles):
@@ -52,7 +59,7 @@ def _error(status_code: int, code: str) -> JSONResponse:
 
 
 class DeclaredLengthLimit:
-    """Refuse an upload whose Content-Length header is above the limit, before its body is read.
+    """Refuse an upload whose Content-Length is above the limit plus the multipart allowance.
 
     FastAPI parses a form body before any route code runs, so the check has to sit in front of
     the application. A body with no usable length header is left to the streaming check in the
@@ -70,7 +77,7 @@ class DeclaredLengthLimit:
             and _UPLOAD_PATH.match(scope["path"])
         ):
             declared = _declared_length(scope)
-            if declared is not None and declared > self.limit_bytes:
+            if declared is not None and declared > self.limit_bytes + MULTIPART_ALLOWANCE_BYTES:
                 await _error(413, "file_too_large")(scope, receive, send)
                 return
         await self.app(scope, receive, send)
@@ -98,6 +105,7 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
     app.add_middleware(DeclaredLengthLimit, limit_bytes=upload_limit_bytes(services))
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
     semaphore = threading.BoundedSemaphore(1)
     app.state.inference_semaphore = semaphore
     app.include_router(build_router(services, semaphore))
