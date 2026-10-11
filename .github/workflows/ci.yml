@@ -16,10 +16,27 @@ jobs:
       - name: Install CPU torch, then the project with all extras
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
-          pip install -e ".[ml,pdf,dev]"
+          pip install -e ".[ml,pdf,api,dev]"
       - run: ruff check .
       - run: ruff format --check .
       - name: Tests
         env:
           HF_HUB_OFFLINE: "1"
         run: pytest -q
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack with the stub backend
+        env:
+          DOCRAG_BACKEND: stub
+        run: docker compose up -d --wait app
+      - name: Health check
+        run: curl -fsS http://localhost:8000/api/health
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

@@ -9,3 +9,4 @@ Usage: `python pipeline.py --corpus CORPUS.json --eval EVAL.json --mode hybrid [
 The corpus is a list of documents with `version_info` and `updates`; the eval file is a list of `{"question", "answer"}`.
 No data is included in this directory: the corpus, the evaluation questions and the answers are not published.
 This copy does not import the project's `src/` package and has no private paths.
+The project overview, the ablation ladder (this copy is rung L0) and the results are in the top-level [README](../../README.md).

@@ -4,6 +4,7 @@
 !pyproject.toml
 !requirements*.txt
 !data/sample/
+!scripts/fetch_models.py
 
 # Byproducts of local runs
 **/__pycache__

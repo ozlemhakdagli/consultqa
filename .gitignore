@@ -17,3 +17,6 @@ data/raw/
 .env.*
 !.env.example
 .claude/
+
+# Local service state (SQLite, vectors) written by the app
+state/

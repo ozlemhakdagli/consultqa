@@ -1,0 +1,69 @@
+# Compose stack for docrag. Every image tag is pinned to an exact version.
+# First run: docker compose --profile setup run --rm fetch-models (about 7 GB), then docker compose up -d --wait app
+name: docrag
+
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  app:
+    build: *app-build
+    image: docrag:dev
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DOCRAG_BACKEND: ${DOCRAG_BACKEND:-real}
+      DOCRAG_QDRANT_URL: http://qdrant:6333
+      # The LLM reader is enabled only when these are set in .env, for example
+      # DOCRAG_LLM_BASE_URL=http://ollama:11434/v1 and DOCRAG_LLM_MODEL=<a model pulled into ollama>.
+      DOCRAG_LLM_BASE_URL: ${DOCRAG_LLM_BASE_URL:-}
+      DOCRAG_LLM_MODEL: ${DOCRAG_LLM_MODEL:-}
+    volumes:
+      - models:/models
+      - state:/app/state
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  fetch-models:
+    profiles: ["setup"]
+    build: *app-build
+    image: docrag:dev
+    working_dir: /app
+    command: ["python", "scripts/fetch_models.py"]
+    environment:
+      HF_HUB_OFFLINE: "0"
+    volumes:
+      - models:/models
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    volumes:
+      - qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  ollama:
+    profiles: ["llm"]
+    image: ollama/ollama:0.40.3
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  models:
+  state:
+  qdrant:
+  ollama:
