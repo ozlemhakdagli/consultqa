@@ -113,6 +113,40 @@ export const EN = Object.freeze({
   "method.paper.summary": "This is the method of a published paper on the same subject; it takes the answer from the most relevant place.",
   "method.paper.note": "For comparison only. In our trial it did clearly worse than “Fast and accurate”.",
 
+  "panes.legend": "Sections",
+  "panes.documents": "Documents",
+  "panes.viewer": "Document",
+  "panes.chat": "Chat",
+
+  "viewer.empty": "Open a document, or press a page button in an answer, to see the source.",
+  "viewer.pageLabel": "Page",
+  "viewer.pageOf": "/ {count}",
+  "viewer.zoomIn": "Zoom in",
+  "viewer.zoomOut": "Zoom out",
+  "viewer.fitWidth": "Fit width",
+  "viewer.loading": "Opening the document…",
+  "viewer.cantShow": "This file can't be shown, only its text.",
+  "viewer.oldDocument": "This document was added before the viewer existed. Remove it and add it again to see it here.",
+  "viewer.noHighlight": "The page is open, but the answer sentence could not be marked on it.",
+  "viewer.selectionAsk": "Use this text as a question",
+
+  "documents.open": "Open {name}",
+
+  "scope.legend": "Where should the question look?",
+  "scope.document": "In this document",
+  "scope.folder": "In the whole folder",
+  "scope.noDocument": "No document is open, so the whole folder is searched.",
+
+  "thread.independent": "Each question is answered on its own. Earlier questions are not remembered.",
+  "thread.scopeDocument": "In {document}",
+  "thread.scopeFolder": "In the whole folder",
+
+  "result.pageButton": "Page {page}",
+  "result.pageButtonLabel": "Page {page}: show it in {document}",
+  "result.relatedTitle": "Related pages",
+  "result.relatedLabel": "Page {page}: {document}",
+  "result.sourcePage": "Page: {page}",
+
   "answer.title": "Answer",
   "answer.empty": "Your answer will appear here.",
   "answer.llmOff": "Writing answers with AI is turned off in this system, so the answers are short pieces taken from the document.",
@@ -141,6 +175,7 @@ export const EN = Object.freeze({
   "error.collection_exists": "A folder with this name already exists. Type another name or choose that folder from the list.",
   "error.collection_busy": "Documents in this folder are still being prepared. Try again when they are done.",
   "error.document_not_found": "This document no longer exists. The list has been refreshed.",
+  "error.file_not_found": "This file could not be found.",
   "error.file_too_large": "The file is too large.",
   "error.unsupported_type": "This file type is not supported. Add a PDF or a text file.",
   "error.preset_unavailable": "The method you chose cannot be used right now. Choose another method.",

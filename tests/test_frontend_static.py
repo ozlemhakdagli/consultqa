@@ -10,7 +10,10 @@ from consultqa.config import PRESETS
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
-JS_FILES = sorted(FRONTEND.rglob("*.js"))
+# The vendored library is third-party code and is not held to the rules for our own modules.
+JS_FILES = sorted(
+    p for p in FRONTEND.rglob("*.js") if "vendor" not in p.relative_to(FRONTEND).parts
+)
 BACKEND_SOURCES = [
     "src/consultqa/api/routes.py",
     "src/consultqa/api/app.py",
@@ -204,9 +207,15 @@ def test_every_static_text_key_exists_in_strings():
     assert used and used <= keys(TR_JS) and used <= keys(EN_JS)
 
 
-def test_the_four_stylesheets_are_linked_in_order():
+def test_the_five_stylesheets_are_linked_in_order():
     hrefs = [a["href"] for tag, a in _page().tags if tag == "link" and a.get("rel") == "stylesheet"]
-    assert hrefs == ["/css/tokens.css", "/css/base.css", "/css/layout.css", "/css/components.css"]
+    assert hrefs == [
+        "/css/tokens.css",
+        "/css/base.css",
+        "/css/layout.css",
+        "/css/components.css",
+        "/vendor/pdfjs/pdf_viewer.css",
+    ]
     assert all((FRONTEND / href.lstrip("/")).is_file() for href in hrefs)
 
 
@@ -241,8 +250,20 @@ def test_reduced_motion_is_respected():
 
 def test_the_page_flow_is_in_reading_order():
     page = _page()
-    ids = [a["id"] for tag, a in page.tags if tag in ("section", "details") and "id" in a]
-    assert ids[:4] == ["step-documents", "step-ask", "step-answer", "advanced"]
+    ids = [a["id"] for _, a in page.tags if "id" in a]
+    # Documents pane first, then the viewer, then the chat: its answer, the scope, the question.
+    flow = [
+        "pane-documents",
+        "step-documents",
+        "advanced",
+        "pane-viewer",
+        "pane-chat",
+        "step-answer",
+        "scope-switch",
+        "step-ask",
+    ]
+    positions = [ids.index(element_id) for element_id in flow]
+    assert positions == sorted(positions)
     advanced = next(a for tag, a in page.tags if tag == "details" and a.get("id") == "advanced")
     assert "open" not in advanced  # closed by default
 

@@ -182,3 +182,55 @@ def test_pdf_with_two_headings_and_turkish_becomes_markdown(tmp_path):
     assert TURKISH_SENTENCE in text
     assert re.search(r"^#+ Sipariş Kılavuzu$", text, flags=re.MULTILINE)
     assert re.search(r"^#+ Stok Girişi$", text, flags=re.MULTILINE)
+
+
+def test_text_parser_parse_pages_is_one_page(tmp_path):
+    path = tmp_path / "a.txt"
+    path.write_text("Sipariş modülü", encoding="utf-8")
+    assert TextParser().parse_pages(path) == ["Sipariş modülü"]
+
+
+def test_markdown_parse_pages_is_one_page_without_docling(tmp_path):
+    path = tmp_path / "n.md"
+    path.write_text("# Giriş\nmetin", encoding="utf-8")
+    assert DocumentParser(max_pages=10).parse_pages(path) == ["# Giriş\nmetin"]
+
+
+@pytest.mark.model
+def test_docling_per_page_matches_full_export(tmp_path):
+    """Each page has a heading and two full sentences ending in periods, so no text runs across a
+    page break. The per-page export then matches the real pages (Docling 2.137.0, pinned)."""
+    words = ["zeytin", "kayısı", "nohut"]
+    pages_blocks = [
+        [
+            ("h2", f"Bölüm {word}"),
+            ("p", f"Bu sayfada {word} geçiyor. Cümle burada tamamen bitiyor."),
+            ("p", f"Sayfanın ikinci paragrafı da {word} ile biter."),
+        ]
+        for word in words
+    ]
+    path = write_pdf(tmp_path / "three.pdf", pages_blocks)
+    parser = DoclingParser(max_pages=10)
+    pages = parser.parse_pages(path)
+    assert len(pages) == 3
+    for index, word in enumerate(words):
+        assert word in pages[index]
+        assert all(other not in pages[index] for other in words if other != word)
+    full = parser.parse(path)
+    assert sorted(full.split()) == sorted(" ".join(pages).split())
+
+
+@pytest.mark.model
+def test_docling_text_running_across_a_page_break_stays_on_its_first_page(tmp_path):
+    """Characterization, not a wish: Docling 2.137.0 (pinned) merges one-word pages with no
+    sentence end into one item, and the per-page export gives that item to the page it starts on.
+    Each word still appears once, in order. This is the accepted cost in spec section 4."""
+    words = ["zeytin", "kayısı", "nohut"]
+    path = write_pdf(tmp_path / "three.pdf", [[("p", word)] for word in words])
+    pages = DoclingParser(max_pages=10).parse_pages(path)
+    tokens = " ".join(pages).split()
+    positions = [tokens.index(word) for word in words]
+    assert positions == sorted(positions)
+    assert words[0] in pages[0]
+    for word in words:
+        assert sum(word in page.split() for page in pages) == 1

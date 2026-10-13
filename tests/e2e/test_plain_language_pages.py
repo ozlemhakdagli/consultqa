@@ -50,7 +50,7 @@ def test_the_disabled_ai_mode_is_plain(page, base_url):
 def test_answer_not_found_and_error_states_are_plain(page, base_url):
     collection_with_document(page, base_url)
     _ask(page)
-    expect(page.locator("#result-title")).to_be_visible()
+    expect(page.locator(".result-title")).to_be_visible()
     open_advanced(page)
     _clean(page)
     page.route(

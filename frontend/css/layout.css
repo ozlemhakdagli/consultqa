@@ -38,44 +38,65 @@
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--gap);
   padding: var(--gap) var(--gutter) 32px;
 }
 
-/* Wide screens: documents and question on the left, the answer beside them on the right. */
-@media (min-width: 62rem) {
-  .workspace {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    grid-template-areas:
-      "documents answer"
-      "ask answer"
-      "advanced answer";
-    grid-template-rows: auto auto 1fr;
-    align-items: start;
-  }
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+}
 
-  #step-documents {
-    grid-area: documents;
-  }
+/* Each pane is a card. A phone shows one pane at a time; the tab row above the panes picks it. */
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
 
-  #step-ask {
-    grid-area: ask;
-  }
+.pane-head {
+  display: grid;
+  gap: 4px;
+}
 
-  #step-answer {
-    grid-area: answer;
-    position: sticky;
-    top: var(--gap);
-    max-height: calc(100vh - 2 * var(--gap));
-    max-height: calc(100dvh - 2 * var(--gap));
-    overflow-y: auto;
-  }
+.pane-head h2 {
+  font-size: 1.3rem;
+}
 
-  #advanced {
-    grid-area: advanced;
-  }
+.step {
+  min-width: 0;
+}
+
+.step > h2 {
+  font-size: 1.3rem;
+}
+
+.pane-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.viewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .form {
@@ -85,13 +106,189 @@
   margin-top: 12px;
 }
 
-/* A phone keeps the same single column, with a little less room around each step. */
+@media (max-width: 999.98px) {
+  .pane[data-pane-active="false"] {
+    display: none;
+  }
+
+  /* The thread scrolls inside its own part of the chat tab, so the question form stays on screen. */
+  .pane-chat .answer-area {
+    max-height: 28vh;
+    overflow-y: auto;
+  }
+
+  .viewer-canvas {
+    min-height: 60vh;
+  }
+}
+
 @media (max-width: 30rem) {
-  .card {
+  .pane {
     padding: 14px;
   }
 
   .button-large {
     width: 100%;
+  }
+}
+
+/* The compact chat pane: the scope row and the question form. From 600 px on, the tabs and the
+   desktop layout both use it, so the question stays on screen. */
+@media (min-width: 600px) {
+  .pane-chat .scope-switch {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 2px 10px 6px;
+  }
+
+  .pane-chat .scope-switch legend {
+    width: auto;
+    font-size: 0.9rem;
+  }
+
+  .pane-chat .scope-option {
+    min-height: 44px;
+    font-size: 0.95rem;
+  }
+
+  .pane-chat .scope-option input {
+    width: 20px;
+    min-height: 20px;
+  }
+
+  /* The question box and the button share a row; the tip, the examples and the messages sit under
+     them. */
+  .pane-chat .form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 10rem;
+    gap: 6px 10px;
+    margin-top: 0;
+  }
+
+  .pane-chat #question {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 88px;
+    font-size: 1rem;
+  }
+
+  .pane-chat #ask-submit {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    min-height: 52px;
+    font-size: 1rem;
+  }
+
+  .pane-chat .form > :not(#question):not(#ask-submit) {
+    grid-column: 1 / -1;
+  }
+
+  /* A single column that cannot be wider than the pane: the chip row scrolls inside it. */
+  .pane-chat .ask-hints {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .pane-chat .examples {
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .pane-chat .example-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .pane-chat .example-button {
+    flex: none;
+    white-space: nowrap;
+    min-height: 44px;
+  }
+}
+
+/* Wide screens: the documents, the viewer and the chat stand side by side. Each pane scrolls on its
+   own and the viewer takes the height of the window. */
+@media (min-width: 1000px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .pane-tabs {
+    display: none;
+  }
+
+  .panes {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: 280px minmax(0, 1fr) 420px;
+    align-items: stretch;
+  }
+
+  .pane {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .pane-viewer {
+    overflow-y: auto;
+  }
+
+  /* The viewer keeps a usable height; when the pane is shorter it scrolls as a whole. */
+  .viewer-canvas {
+    flex: 1 1 auto;
+    min-height: 12rem;
+  }
+
+  /* The chat pane fits its head, the scope row and the question form on screen. The answer takes
+     what is left and scrolls inside itself; it keeps at least 8rem. */
+  .workspace {
+    padding: var(--gap) var(--gutter) 16px;
+  }
+
+  .pane {
+    padding: 12px;
+  }
+
+  .pane-chat {
+    gap: 8px;
+  }
+
+  .pane-chat .pane-head {
+    gap: 0;
+  }
+
+  .pane-chat .pane-head h2 {
+    font-size: 1.1rem;
+  }
+
+  .pane-chat .pane-head .help,
+  .pane-chat .help {
+    margin-top: 0;
+    font-size: 0.9rem;
+  }
+
+  .pane-chat .answer-area {
+    flex: 1 1 0;
+    min-height: 8rem;
+    overflow-y: auto;
+  }
+
+  .pane-chat h3 {
+    margin: 0;
+    font-size: 1rem;
   }
 }

@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/vendor/pdfjs/pdf_viewer.css">
   <script type="module" src="/js/main.js"></script>
 </head>
 <body class="booting">
@@ -56,71 +57,117 @@
   </header>
   <p id="system-banner" class="banner banner-warn" hidden></p>
   <main class="workspace">
-    <section id="step-documents" class="card" aria-labelledby="step-documents-title">
-      <h2 id="step-documents-title"><span class="step-number">1</span> <span data-text="documents.title"></span></h2>
-      <p class="help" data-text="documents.help"></p>
-      <p id="library-notice" class="notice" hidden></p>
-      <div id="dropzone" class="dropzone">
-        <p class="dropzone-title" data-text="documents.drop"></p>
-        <p class="dropzone-or" data-text="documents.or"></p>
-        <label for="upload-files" class="button dropzone-button" data-text="documents.choose"></label>
-        <input id="upload-files" class="sr-only" type="file" multiple aria-describedby="upload-hint upload-reason">
+    <nav id="pane-tabs" class="pane-tabs" role="tablist" aria-labelledby="pane-tabs-title">
+      <span id="pane-tabs-title" class="sr-only" data-text="panes.legend"></span>
+      <button id="tab-documents" type="button" class="pane-tab" role="tab" aria-controls="pane-documents" aria-selected="true" tabindex="0" data-text="panes.documents"></button>
+      <button id="tab-viewer" type="button" class="pane-tab" role="tab" aria-controls="pane-viewer" aria-selected="false" tabindex="-1" data-text="panes.viewer"></button>
+      <button id="tab-chat" type="button" class="pane-tab" role="tab" aria-controls="pane-chat" aria-selected="false" tabindex="-1" data-text="panes.chat"></button>
+    </nav>
+    <div class="panes">
+      <div id="pane-documents" class="pane pane-documents" role="tabpanel" tabindex="-1" aria-labelledby="tab-documents" data-pane-active="true">
+        <section id="step-documents" class="step" aria-labelledby="step-documents-title">
+          <h2 id="step-documents-title" data-text="documents.title"></h2>
+          <p class="help" data-text="documents.help"></p>
+          <p id="library-notice" class="notice" hidden></p>
+          <div id="dropzone" class="dropzone">
+            <p class="dropzone-title" data-text="documents.drop"></p>
+            <p class="dropzone-or" data-text="documents.or"></p>
+            <label for="upload-files" class="button dropzone-button" data-text="documents.choose"></label>
+            <input id="upload-files" class="sr-only" type="file" multiple aria-describedby="upload-hint upload-reason">
+          </div>
+          <p id="upload-hint" class="help"></p>
+          <p id="upload-reason" class="reason" hidden></p>
+          <h3 id="documents-title" hidden></h3>
+          <p id="documents-empty" class="help" hidden></p>
+          <ul id="document-list" class="doc-list"></ul>
+          <p id="documents-live" class="sr-only" role="status"></p>
+          <p id="documents-message" class="message" aria-live="polite" hidden></p>
+        </section>
+        <details id="advanced" class="card advanced">
+          <summary data-text="advanced.title"></summary>
+          <p class="help" data-text="advanced.help"></p>
+          <fieldset id="method-fieldset" class="methods">
+            <legend data-text="advanced.methodLegend"></legend>
+            <p class="help" data-text="advanced.methodHelp"></p>
+            <div id="method-list"></div>
+          </fieldset>
+          <section class="folders" aria-labelledby="folder-title">
+            <h3 id="folder-title" data-text="advanced.folderTitle"></h3>
+            <p class="help" data-text="advanced.folderHelp"></p>
+            <h4 id="folder-list-title" data-text="collection.listTitle" hidden></h4>
+            <ul id="folder-list" class="doc-list" aria-labelledby="folder-list-title" hidden></ul>
+            <label for="collection-select" data-text="collection.selectLabel"></label>
+            <select id="collection-select"></select>
+            <form id="collection-form" class="form" novalidate>
+              <label for="collection-name" data-text="collection.newLabel"></label>
+              <input id="collection-name" type="text" maxlength="80" autocomplete="off" aria-describedby="collection-name-help">
+              <p id="collection-name-help" class="help" data-text="collection.newHelp"></p>
+              <button id="collection-create" type="submit" class="button" data-text="collection.create"></button>
+            </form>
+            <p id="collection-message" class="message" aria-live="polite" hidden></p>
+          </section>
+        </details>
       </div>
-      <p id="upload-hint" class="help"></p>
-      <p id="upload-reason" class="reason" hidden></p>
-      <h3 id="documents-title" hidden></h3>
-      <p id="documents-empty" class="help" hidden></p>
-      <ul id="document-list" class="doc-list"></ul>
-      <p id="documents-live" class="sr-only" role="status"></p>
-      <p id="documents-message" class="message" aria-live="polite" hidden></p>
-    </section>
-    <section id="step-ask" class="card" aria-labelledby="step-ask-title">
-      <h2 id="step-ask-title"><span class="step-number">2</span> <span data-text="ask.title"></span></h2>
-      <p class="help" data-text="ask.help"></p>
-      <form id="ask-form" class="form" novalidate>
-        <label for="question" class="sr-only" data-text="ask.questionLabel"></label>
-        <textarea id="question" rows="4" maxlength="500" data-placeholder="ask.questionPlaceholder" aria-describedby="ask-message ask-tip"></textarea>
-        <p id="ask-tip" class="help" data-text="ask.tip"></p>
-        <div class="examples" role="group" aria-labelledby="examples-title">
-          <p id="examples-title" class="help" data-text="ask.examplesTitle"></p>
-          <div id="example-list" class="example-list"></div>
+      <div id="pane-viewer" class="pane pane-viewer" role="tabpanel" tabindex="-1" aria-labelledby="tab-viewer" data-pane-active="false">
+        <h2 id="viewer-title" data-text="panes.viewer"></h2>
+        <div id="viewer-toolbar" class="viewer-toolbar">
+          <label for="viewer-page" data-text="viewer.pageLabel"></label>
+          <input id="viewer-page" type="number" min="1" inputmode="numeric">
+          <span id="viewer-page-count" class="viewer-page-count"></span>
+          <button id="viewer-zoom-out" type="button" class="button-secondary" data-text="viewer.zoomOut"></button>
+          <button id="viewer-zoom-in" type="button" class="button-secondary" data-text="viewer.zoomIn"></button>
+          <button id="viewer-fit" type="button" class="button-secondary" data-text="viewer.fitWidth"></button>
         </div>
-        <p id="ask-message" class="message message-error" role="alert" hidden></p>
-        <p id="ask-reason" class="reason" hidden></p>
-        <button id="ask-submit" type="submit" class="button button-large" data-text="ask.submit"></button>
-      </form>
-    </section>
-    <section id="step-answer" class="card answer-panel" tabindex="0" aria-labelledby="step-answer-title">
-      <h2 id="step-answer-title"><span class="step-number">3</span> <span data-text="answer.title"></span></h2>
-      <p id="llm-notice" class="notice" hidden></p>
-      <p id="result-empty" class="help" data-text="answer.empty"></p>
-      <p id="result-loading" class="loading" role="status" hidden></p>
-      <div id="result" class="result"></div>
-    </section>
-    <details id="advanced" class="card advanced">
-      <summary data-text="advanced.title"></summary>
-      <p class="help" data-text="advanced.help"></p>
-      <fieldset id="method-fieldset" class="methods">
-        <legend data-text="advanced.methodLegend"></legend>
-        <p class="help" data-text="advanced.methodHelp"></p>
-        <div id="method-list"></div>
-      </fieldset>
-      <section class="folders" aria-labelledby="folder-title">
-        <h3 id="folder-title" data-text="advanced.folderTitle"></h3>
-        <p class="help" data-text="advanced.folderHelp"></p>
-        <h4 id="folder-list-title" data-text="collection.listTitle" hidden></h4>
-        <ul id="folder-list" class="doc-list" aria-labelledby="folder-list-title" hidden></ul>
-        <label for="collection-select" data-text="collection.selectLabel"></label>
-        <select id="collection-select"></select>
-        <form id="collection-form" class="form" novalidate>
-          <label for="collection-name" data-text="collection.newLabel"></label>
-          <input id="collection-name" type="text" maxlength="80" autocomplete="off" aria-describedby="collection-name-help">
-          <p id="collection-name-help" class="help" data-text="collection.newHelp"></p>
-          <button id="collection-create" type="submit" class="button" data-text="collection.create"></button>
-        </form>
-        <p id="collection-message" class="message" aria-live="polite" hidden></p>
-      </section>
-    </details>
+        <p id="viewer-message" class="viewer-message message" aria-live="polite" hidden></p>
+        <p id="viewer-empty" class="help" data-text="viewer.empty"></p>
+        <div id="viewer-canvas" class="viewer-canvas"></div>
+        <pre id="viewer-text" class="viewer-text" hidden></pre>
+        <button id="selection-ask" type="button" class="selection-ask-button" hidden data-text="viewer.selectionAsk"></button>
+      </div>
+      <div id="pane-chat" class="pane pane-chat" role="tabpanel" tabindex="-1" aria-labelledby="tab-chat" data-pane-active="false">
+        <div class="pane-head">
+          <h2 data-text="panes.chat"></h2>
+        </div>
+        <section id="step-answer" class="answer-area" tabindex="-1" aria-labelledby="step-answer-title">
+          <h3 id="step-answer-title" data-text="answer.title"></h3>
+          <p class="help" data-text="thread.independent"></p>
+          <div class="ask-hints">
+            <p class="help" data-text="ask.help"></p>
+            <p id="ask-tip" class="help" data-text="ask.tip"></p>
+            <div class="examples" role="group" aria-labelledby="examples-title">
+              <p id="examples-title" class="help" data-text="ask.examplesTitle"></p>
+              <div id="example-list" class="example-list"></div>
+            </div>
+          </div>
+          <p id="llm-notice" class="notice" hidden></p>
+          <p id="result-empty" class="help" data-text="answer.empty"></p>
+          <p id="result-loading" class="loading" role="status" hidden></p>
+          <div id="result" class="result"></div>
+        </section>
+        <fieldset id="scope-switch" class="scope-switch">
+          <legend data-text="scope.legend"></legend>
+          <label class="scope-option">
+            <input id="scope-document" type="radio" name="scope" value="document">
+            <span data-text="scope.document"></span>
+          </label>
+          <label class="scope-option">
+            <input id="scope-folder" type="radio" name="scope" value="folder">
+            <span data-text="scope.folder"></span>
+          </label>
+          <p id="scope-note" class="help" hidden data-text="scope.noDocument"></p>
+        </fieldset>
+        <section id="step-ask" class="step" aria-labelledby="step-ask-title">
+          <h3 id="step-ask-title" data-text="ask.title"></h3>
+          <form id="ask-form" class="form" novalidate>
+            <label for="question" class="sr-only" data-text="ask.questionLabel"></label>
+            <textarea id="question" rows="3" maxlength="500" data-placeholder="ask.questionPlaceholder" aria-describedby="ask-message ask-tip"></textarea>
+            <p id="ask-message" class="message message-error" role="alert" hidden></p>
+            <p id="ask-reason" class="reason" hidden></p>
+            <button id="ask-submit" type="submit" class="button button-large" data-text="ask.submit"></button>
+          </form>
+        </section>
+      </div>
+    </div>
   </main>
 </body>
 </html>

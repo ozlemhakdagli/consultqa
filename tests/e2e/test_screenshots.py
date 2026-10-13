@@ -58,9 +58,17 @@ def _shooter(device: str, scheme: str) -> Callable[..., None]:
     return shot
 
 
+def _show(page: Page, tab: str) -> None:
+    """Below 1000 px only one pane shows; the pane is chosen with its tab, as a person would."""
+    if page.viewport_size["width"] < 1000:
+        page.locator(f"#{tab}").click()
+
+
 def _ask(page: Page, question: str, method: str | None = None) -> None:
     if method:
+        _show(page, "tab-documents")
         choose_method(page, method)
+    _show(page, "tab-chat")
     page.get_by_label("Sorunuz", exact=True).fill(question)
     page.get_by_role("button", name=ASK).click()
 
@@ -87,18 +95,21 @@ def test_screenshots_of_every_state(device, make_page, base_url):
         shot(page, "first-visit")
 
         # 2. a document is ready; the answer shows its source with the sentence marked
+        _show(page, "tab-documents")
         upload_text(page, "ocak.md")
         row = page.locator("#document-list li").filter(has_text="ocak.md")
         expect(row).to_contain_text("Kullanıma hazır")
         _reply_with(page, MARKED_REPLY)
         _ask(page, "Stok modülü")
-        expect(page.locator("#cite-1-text mark")).to_be_visible()
+        expect(page.locator(".citation-card mark").first).to_be_visible()
         shot(page, "answer-marked")
         page.unroute("**/api/collections/*/ask")
 
         # 3. the AI mode, from the stub
         _ask(page, "Stok modülü", method=AI_METHOD)
-        expect(page.locator(".answer-card .note")).to_contain_text("Bu cevabı yapay zekâ yazdı.")
+        expect(page.locator(".answer-card .note").last).to_contain_text(
+            "Bu cevabı yapay zekâ yazdı."
+        )
         shot(page, "answer-ai")
 
         # 4. nothing in the documents answers the question
@@ -121,15 +132,18 @@ def test_screenshots_of_every_state(device, make_page, base_url):
         # 6. no AI mode is configured: the notice shows in the answer panel
         _capabilities_are(page, caps_without_llm(page, base_url))
         open_page(page, base_url)
+        _show(page, "tab-chat")
         expect(page.locator("#llm-notice")).to_be_visible()
         shot(page, "ai-off")
         page.unroute("**/api/capabilities")
 
         # 7. the advanced options, open
+        _show(page, "tab-documents")
         open_advanced(page)
         shot(page, "advanced-open")
 
         # 8. on a light system, the dark theme chosen explicitly
         if scheme == "light":
+            _show(page, "tab-documents")
             page.get_by_role("radio", name="Koyu", exact=True).check()
             shot(page, "theme-forced-dark")

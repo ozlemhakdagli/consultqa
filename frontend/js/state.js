@@ -18,7 +18,31 @@ export const INITIAL_STATE = Object.freeze({
   selectedPreset: "",
   asking: false,
   askMessage: "",
-  result: null,
+  openDocId: "",
+  openPage: 1,
+  // { text, token } | null: the sentence to mark on the open page.
+  highlight: null,
+  // "idle" | "loading" | "ready" | "text" | "failed" | "old"
+  viewerStatus: "idle",
+  // "document" | "folder": where the next question looks.
+  scope: "document",
+  // Turns { id, question, docId, pending, result }; docId is "" for a folder question.
+  thread: [],
+  // { text, token } | null: the text the user selected to ask again.
+  draft: null,
+  // "documents" | "viewer" | "chat"
+  activePane: "documents",
+  // A new value on every open of a page or a document, so that opening the same place again
+  // moves the reader.
+  navToken: 0,
+});
+
+// The viewer keys of a page with no document open.
+export const VIEWER_CLOSED = Object.freeze({
+  openDocId: "",
+  openPage: 1,
+  highlight: null,
+  viewerStatus: "idle",
 });
 
 export function createStore(initial) {

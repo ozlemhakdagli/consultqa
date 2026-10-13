@@ -92,19 +92,38 @@ class NumpyDenseBackend:
 
 
 class DenseChannel:
-    """Retrieves chunks by cosine similarity between the query and the passage vectors."""
+    """Retrieves chunks by cosine similarity between the query and the passage vectors.
+
+    A channel made by ``restricted`` answers only for its own chunks. The backend then has to
+    rank the whole folder (``folder_size`` ids), because the folder's best-scoring ids may all
+    belong to other documents.
+    """
 
     def __init__(
-        self, chunks: Mapping[str, Chunk], encoder: Encoder, backend: DenseBackend
+        self,
+        chunks: Mapping[str, Chunk],
+        encoder: Encoder,
+        backend: DenseBackend,
+        *,
+        folder_size: int | None = None,
     ) -> None:
         self._chunks = chunks
         self._encoder = encoder
         self._backend = backend
+        self._folder_size = folder_size
+
+    def restricted(self, chunks: Mapping[str, Chunk]) -> "DenseChannel":
+        """A channel with the same encoder and backend that answers only for ``chunks``."""
+        folder_size = self._folder_size if self._folder_size is not None else len(self._chunks)
+        return DenseChannel(chunks, self._encoder, self._backend, folder_size=folder_size)
 
     def search(self, query: str, k: int) -> list[Hit]:
         vector = self._encoder.encode_query(query)
+        wanted = k if self._folder_size is None else max(k, self._folder_size)
         hits: list[Hit] = []
-        for chunk_id, score in self._backend.search(vector, k):
+        for chunk_id, score in self._backend.search(vector, wanted):
+            if len(hits) == k:
+                break
             chunk = self._chunks.get(chunk_id)
             if chunk is None:
                 continue

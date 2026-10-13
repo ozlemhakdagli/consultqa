@@ -6,8 +6,11 @@ from ui_helpers import (
     collection_with_document,
     mock_collections_unavailable,
     new_library,
+    newest_title,
     open_advanced,
     open_page,
+    source_card,
+    source_passage,
     upload_text,
 )
 
@@ -172,19 +175,19 @@ def test_the_answer_shows_its_text_then_the_source_in_full(page, base_url):
     expect(page.locator("#result-empty")).to_have_text("Cevabınız burada görünecek.")
     _ask(page)
     expect(page.locator("#result-empty")).to_be_hidden()
-    expect(page.locator("#result-title")).to_contain_text("Stok modülü")
-    expect(page.locator("#result-title")).to_be_focused()
+    expect(newest_title(page)).to_contain_text("Stok modülü")
+    expect(newest_title(page)).to_be_focused()
     expect(page.locator(".answer-card .note")).to_have_text(
         "Bu cevap belgedeki bu cümleden alındı. Cevap kısa olabilir; tam bağlam için kaynak metnine bakın."
     )
     expect(page.locator(".answer-card .meta")).to_have_count(0)
     expect(page.get_by_role("heading", name="Cevabın kaynağı")).to_be_visible()
-    card = page.locator("#cite-1")
+    card = source_card(page)
     expect(card).to_contain_text("Belge: ocak.md")
     expect(card).to_contain_text("Bölüm: Stok")
     expect(card.get_by_role("heading", level=4)).to_have_count(0)
-    expect(page.locator("#cite-1-text")).to_be_visible()
-    expect(page.locator("#cite-1-text")).to_contain_text("Stok modülü performans")
+    expect(source_passage(page)).to_be_visible()
+    expect(source_passage(page)).to_contain_text("Stok modülü performans")
     expect(page.get_by_role("button", name="Kaynağın metnini göster")).to_have_count(0)
     expect(page.locator("details.trace")).to_have_count(0)
 
@@ -198,9 +201,9 @@ def test_ai_answer_names_its_mode_and_markers_open_their_sources(page, base_url)
         "Kullanılan yöntem: Yapay zekâ ile yazılmış cevap"
     )
     page.get_by_role("button", name="1. kaynağa git").click()
-    expect(page.locator("#cite-1")).to_be_focused()
-    expect(page.locator("#cite-1")).to_have_attribute("data-active", "true")
-    expect(page.locator("#cite-1-text")).to_be_visible()
+    expect(source_card(page)).to_be_focused()
+    expect(source_card(page)).to_have_attribute("data-active", "true")
+    expect(source_passage(page)).to_be_visible()
 
 
 # Review Focus 2: a marker without a source and an index such as arr[3] stay plain text.
@@ -235,9 +238,9 @@ def test_unknown_markers_stay_plain_text(page, base_url):
     expect(page.get_by_role("button", name="2. kaynağa git")).to_have_count(1)
     expect(page.locator(".answer-text")).to_contain_text("[7] ile arr[3].")
     expect(page.get_by_role("heading", name="Cevabın kaynakları")).to_be_visible()
-    expect(page.locator("#cite-1")).to_contain_text("Belge: bilinmiyor")
-    expect(page.locator("#cite-1")).to_contain_text("Bölüm: Bölüm")
-    expect(page.locator("#cite-2")).to_contain_text("Bölüm: belirtilmemiş")
+    expect(source_card(page)).to_contain_text("Belge: bilinmiyor")
+    expect(source_card(page)).to_contain_text("Bölüm: Bölüm")
+    expect(source_card(page, 2)).to_contain_text("Bölüm: belirtilmemiş")
     expect(page.get_by_role("heading", name="Kaynak 1")).to_be_visible()
     expect(page.get_by_role("heading", name="Kaynak 2")).to_be_visible()
 
@@ -247,9 +250,7 @@ def test_answer_not_found_is_a_calm_state_with_one_hint(page, base_url):
     collection_with_document(page, base_url)
     _mock_ask(page, answer=None, citations=[], trace=[], preset="L2", latency_ms=12.0)
     _ask(page)
-    expect(page.locator("#result-title")).to_have_text(
-        "Bu sorunun cevabı yüklediğiniz belgelerde yok."
-    )
+    expect(newest_title(page)).to_have_text("Bu sorunun cevabı yüklediğiniz belgelerde yok.")
     expect(page.locator(".notfound-card p")).to_have_text(
         "Sorunuzu belgede geçen kelimelere daha yakın yazmayı deneyin."
     )
@@ -315,7 +316,7 @@ def test_double_click_sends_one_request(page, base_url):
     page.on("request", lambda r: requests.append(r.url) if r.url.endswith("/ask") else None)
     page.get_by_label("Sorunuz", exact=True).fill("Stok modülü")
     page.get_by_role("button", name=ASK).dblclick()
-    expect(page.locator("#result-title")).to_be_visible()
+    expect(newest_title(page)).to_be_visible()
     assert len(requests) == 1
 
 
@@ -326,7 +327,7 @@ def test_passage_text_is_shown_as_text_never_as_html(page, base_url):
         page, base_url, content="# Not\n\nBu paragraf <script>window.__pwned = 1</script> içerir.\n"
     )
     _ask(page, question="paragraf")
-    expect(page.locator("#cite-1-text")).to_be_visible()
-    expect(page.locator("#cite-1-text")).to_contain_text("<script>window.__pwned = 1</script>")
+    expect(source_passage(page)).to_be_visible()
+    expect(source_passage(page)).to_contain_text("<script>window.__pwned = 1</script>")
     expect(page.locator(".answer-text")).to_contain_text("<script>")
     assert page.evaluate("window.__pwned") is None

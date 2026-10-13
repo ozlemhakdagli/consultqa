@@ -1,6 +1,7 @@
 // Use cases of the document list: load it, and delete a document after a confirmation.
 import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
+import { VIEWER_CLOSED } from "../state.js";
 
 // The folder list shows how many documents each folder has. The list just loaded is the newer
 // count, so the chosen folder takes it; the list is kept as it is when the count did not change.
@@ -48,9 +49,12 @@ export function createDocumentActions({ api, store }) {
     const name = store.get().documents.find((document) => document.id === id)?.filename ?? "";
     try {
       await api.deleteDocument(collectionId, id);
+      // The viewer is reset only when the open document is the one deleted.
+      const viewerReset = store.get().openDocId === id ? VIEWER_CLOSED : {};
       store.set({
         confirmDeleteId: "",
-        result: null,
+        thread: [],
+        ...viewerReset,
         documentsMessage: { kind: "info", text: t("documents.deleted", { name }) },
       });
     } catch (error) {

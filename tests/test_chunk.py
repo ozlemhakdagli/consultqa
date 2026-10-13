@@ -3,7 +3,7 @@ import random
 import re
 from collections.abc import Callable
 
-from consultqa.ingest.chunk import _sections, chunk_markdown, count_words
+from consultqa.ingest.chunk import _sections, chunk_markdown, chunk_pages, count_words
 from consultqa.models import Chunk
 
 
@@ -194,3 +194,20 @@ def test_each_piece_is_counted_once_not_as_a_growing_run():
     assert len(counted) <= len(table.split()) + 4
     # Each character of the table is counted as a paragraph and as a word, nothing more.
     assert sum(len(text) for text in counted) <= 2 * len(table) + 20
+
+
+def test_chunk_pages_sets_page_and_keeps_positions():
+    chunks = chunk_pages("d", ["# A\n\nalpha beta", "gamma delta"], max_tokens=50)
+    assert [c.page for c in chunks] == [1, 2]
+    assert [c.position for c in chunks] == [0, 1]
+    assert [c.chunk_id for c in chunks] == ["d#0", "d#1"]
+
+
+def test_chunk_pages_carries_heading_path():
+    chunks = chunk_pages("d", ["# A\n\nalpha beta", "gamma delta"], max_tokens=50)
+    assert chunks[1].heading_path == ("A",)
+
+
+def test_chunk_pages_blank_page_keeps_numbering():
+    chunks = chunk_pages("d", ["one", "  \n", "three"], max_tokens=50)
+    assert [c.page for c in chunks] == [1, 3]

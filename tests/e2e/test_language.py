@@ -75,19 +75,17 @@ def test_the_switch_changes_every_visible_text_and_is_remembered(page, base_url)
 
     expect(page.locator("html")).to_have_attribute("lang", "en")
     expect(page).to_have_title("Document Q&A")
-    expect(page.locator("h2")).to_have_text(
-        ["1 Add your documents", "2 Type your question", "3 Answer"]
-    )
+    expect(page.locator("h2")).to_have_text(["Add your documents", "Document", "Chat"])
     expect(page.locator("#system-chip")).to_have_text("System ready")
     expect(page.locator("#document-list li")).to_contain_text("Ready to use")
     expect(page.locator(".answer-card .note")).to_contain_text("This answer was taken from")
     # The answer and the document's own text stay in the language of the document.
-    expect(page.locator("#result-title")).to_have_text(
+    expect(page.locator(".result-title")).to_have_text(
         "Stok modülü performans iyileştirmesi yapıldı."
     )
-    expect(page.locator("#cite-1")).to_contain_text("Document: ocak.md")
-    expect(page.locator("#cite-1")).to_contain_text("Section: Stok")
-    expect(page.locator("#cite-1")).to_contain_text("Text in the document")
+    expect(page.locator(".citation-card").first).to_contain_text("Document: ocak.md")
+    expect(page.locator(".citation-card").first).to_contain_text("Section: Stok")
+    expect(page.locator(".citation-card").first).to_contain_text("Text in the document")
     expect(page.get_by_role("radio", name="Fast and accurate", exact=True)).to_be_visible()
     expect(page.locator("#library-notice")).to_contain_text(
         "To return to the default folder, choose “My documents” under Advanced options."

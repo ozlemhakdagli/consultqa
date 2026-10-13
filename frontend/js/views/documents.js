@@ -48,6 +48,16 @@ function dismissButton(row, actions) {
   });
 }
 
+// The button that shows a ready document in the viewer. The open document's row is marked.
+function openControl(row, actions) {
+  return el("button", {
+    class: "button button-secondary doc-open",
+    text: t("documents.open", { name: row.name }),
+    attrs: { type: "button", "data-doc-id": row.docId },
+    on: { click: () => actions.viewer.openDocument(row.docId) },
+  });
+}
+
 function documentRow(row, state, actions) {
   const main = [
     el("p", { class: "doc-name", text: row.name }),
@@ -62,11 +72,24 @@ function documentRow(row, state, actions) {
     main.push(el("p", { class: "doc-note", text: t("documents.preparingNote") }));
   }
   const children = [el("div", { class: "doc-main" }, ...main)];
-  if (row.status === "ready") children.push(deleteControl(row, state, actions));
+  const isOpen = row.status === "ready" && row.docId === state.openDocId;
+  if (row.status === "ready") {
+    children.push(openControl(row, actions), deleteControl(row, state, actions));
+  }
   if (row.status === "duplicate" || row.status === "failed") {
     children.push(dismissButton(row, actions));
   }
-  return el("li", { class: "doc-row", attrs: { "data-status": row.status } }, ...children);
+  const attrs = { "data-status": row.status };
+  if (isOpen) attrs["aria-current"] = "true";
+  return el("li", { class: isOpen ? "doc-row doc-row-open" : "doc-row", attrs }, ...children);
+}
+
+// The document id of the open button that has the focus, or null. The list is redrawn on every
+// change, which would drop that focus, so it is put back on the same document's button after it.
+function focusedOpenDocId(list) {
+  const active = document.activeElement;
+  if (!active || !list.contains(active) || !active.classList.contains("doc-open")) return null;
+  return active.dataset.docId;
 }
 
 export function mountDocumentsView(store, actions) {
@@ -92,7 +115,13 @@ export function mountDocumentsView(store, actions) {
       setVisible(empty, hasLibrary && emptyText !== null);
       empty.textContent = emptyText ?? "";
       setVisible(list, hasLibrary);
+      const focusedDocId = focusedOpenDocId(list);
       list.replaceChildren(...rows.map((row) => documentRow(row, state, actions)));
+      if (focusedDocId !== null) {
+        [...list.querySelectorAll(".doc-open")]
+          .find((button) => button.dataset.docId === focusedDocId)
+          ?.focus();
+      }
       // Focus moves to the cancel button only when a confirmation opens, not on later re-renders.
       if (state.confirmDeleteId && state.confirmDeleteId !== openedConfirmId) {
         list.querySelector(".doc-confirm .button-secondary")?.focus();
@@ -106,6 +135,7 @@ export function mountDocumentsView(store, actions) {
       "selectedCollectionId",
       "collections",
       "confirmDeleteId",
+      "openDocId",
     ],
   );
 

@@ -7,12 +7,11 @@ import { methodKey } from "../methods.js";
 import { splitMarkers } from "../markers.js";
 
 // The passage as text, or as text with its answer sentence marked when `parts` is given.
-function passageNode(id, text, parts) {
-  const attrs = { id: `${id}-text` };
-  if (parts === null) return el("blockquote", { class: "source-passage", attrs, text });
+function passageNode(text, parts) {
+  if (parts === null) return el("blockquote", { class: "source-passage", text });
   return el(
     "blockquote",
-    { class: "source-passage", attrs },
+    { class: "source-passage" },
     parts.before,
     el(
       "mark",
@@ -25,15 +24,47 @@ function passageNode(id, text, parts) {
   );
 }
 
+// The button that opens a page of a document. Its text is the sentence the answer came from, when
+// there is one; otherwise the whole answer.
+function pageButton(docId, page, names, text, onOpenPage) {
+  const documentName = names.get(docId) ?? t("result.unknownDocument");
+  return el("button", {
+    class: "page-button",
+    text: t("result.pageButton", { page }),
+    attrs: {
+      type: "button",
+      "aria-label": t("result.pageButtonLabel", { document: documentName, page }),
+    },
+    on: { click: () => onOpenPage({ docId, page, text }) },
+  });
+}
+
+// The marked sentence as plain text: the words before the answer, the answer and the words after it.
+function markedSentence(parts) {
+  return `${parts.lead}${parts.answer}${parts.tail}`;
+}
+
 // One source: where the passage came from, then the whole passage, visible at once.
-function sourceCard(citation, names, several, parts) {
-  const id = `cite-${citation.number}`;
+function sourceCard(citation, names, several, parts, context) {
   const heading = several
     ? [el("h4", { text: t("result.sourceHeading", { number: citation.number }) })]
     : [];
+  const hasPage = citation.page != null;
+  const pageLines = hasPage
+    ? [
+        el("p", { class: "citation-meta", text: t("result.sourcePage", { page: citation.page }) }),
+        pageButton(
+          citation.doc_id,
+          citation.page,
+          names,
+          parts ? markedSentence(parts) : context.answer,
+          context.onOpenPage,
+        ),
+      ]
+    : [];
   return el(
     "li",
-    { class: "citation-card", attrs: { id, tabindex: -1 } },
+    { class: "citation-card", attrs: { tabindex: -1 } },
     ...heading,
     el("p", {
       class: "citation-meta",
@@ -47,8 +78,9 @@ function sourceCard(citation, names, several, parts) {
         section: citation.heading_path.join(" › ") || t("result.noSection"),
       }),
     }),
+    ...pageLines,
     el("p", { class: "passage-label", text: t("result.passageLabel") }),
-    passageNode(id, citation.text, parts),
+    passageNode(citation.text, parts),
   );
 }
 
@@ -60,11 +92,11 @@ function showSource(item, cards) {
   item.scrollIntoView({ block: "nearest" });
 }
 
-function sourcesSection(citations, names, cards, parts) {
+function sourcesSection(citations, names, cards, parts, context) {
   const several = citations.length > 1;
   const list = el("ol", { class: "citation-list" });
   for (const citation of citations) {
-    const item = sourceCard(citation, names, several, parts);
+    const item = sourceCard(citation, names, several, parts, context);
     cards.set(citation.number, item);
     list.append(item);
   }
@@ -119,7 +151,7 @@ function answerCard(result, cards, parts) {
   const children = [
     el(
       "p",
-      { class: "answer-text", attrs: { id: "result-title", tabindex: -1 } },
+      { class: "answer-text result-title", attrs: { tabindex: -1 } },
       ...answerNodes(result.answer, cards),
     ),
   ];
@@ -136,11 +168,61 @@ function markedParts(result) {
   return splitPassage(result.citations[0].text, result.answer);
 }
 
-// Returns [answer card, sources section]; the sources section is null when there are no sources.
-export function renderAnswer(result, names) {
+// The pages related to the question, each page once. Pages that are not known are left out.
+// The document name is shown only when the list spans more than one document.
+function relatedSection(related, names, onOpenPage) {
+  const seen = new Set();
+  const pages = [];
+  for (const item of related) {
+    if (item.page == null) continue;
+    const key = `${item.doc_id}:${item.page}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pages.push(item);
+  }
+  if (pages.length === 0) return null;
+  const several = new Set(pages.map((item) => item.doc_id)).size > 1;
+  const items = pages.map((item) => {
+    const documentName = names.get(item.doc_id) ?? t("result.unknownDocument");
+    const label = several
+      ? t("result.relatedLabel", { document: documentName, page: item.page })
+      : t("result.pageButton", { page: item.page });
+    return el(
+      "li",
+      {},
+      el("button", {
+        class: "page-button",
+        text: label,
+        attrs: {
+          type: "button",
+          // The name starts with the visible text: the visible label, or for one document the
+          // "Page n" text followed by the document.
+          "aria-label": several
+            ? label
+            : t("result.pageButtonLabel", { document: documentName, page: item.page }),
+        },
+        on: { click: () => onOpenPage({ docId: item.doc_id, page: item.page, text: null }) },
+      }),
+    );
+  });
+  return el(
+    "section",
+    { class: "related-pages" },
+    el("h3", { text: t("result.relatedTitle") }),
+    el("ul", { class: "related-list" }, ...items),
+  );
+}
+
+// Returns [answer card, sources section, related section]. A section is null when it is empty.
+// onOpenPage({ docId, page, text }) is called by a page button.
+export function renderAnswer(result, names, onOpenPage = () => {}) {
   const cards = new Map();
   const parts = markedParts(result);
+  const context = { answer: result.answer, onOpenPage };
   const sources =
-    result.citations.length > 0 ? sourcesSection(result.citations, names, cards, parts) : null;
-  return [answerCard(result, cards, parts), sources];
+    result.citations.length > 0
+      ? sourcesSection(result.citations, names, cards, parts, context)
+      : null;
+  const related = relatedSection(result.related ?? [], names, onOpenPage);
+  return [answerCard(result, cards, parts), sources, related];
 }

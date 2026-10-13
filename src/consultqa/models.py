@@ -12,6 +12,7 @@ class Chunk:
     position: int
     heading_path: tuple[str, ...]
     text: str
+    page: int | None = None  # 1-based page of the source PDF; None for text and Markdown
 
     @property
     def section_id(self) -> str:

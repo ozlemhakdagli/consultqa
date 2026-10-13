@@ -8,7 +8,13 @@ from plain_words import find_forbidden_en
 ROOT = FRONTEND.parent
 TURKISH_LETTERS = re.compile("[çğıöşüÇĞİÖŞÜ]")
 # Values that are the same in both languages on purpose: names and a pattern.
-SAME_IN_BOTH = {"documents.listTitle", "documents.announce", "language.tr", "language.en"}
+SAME_IN_BOTH = {
+    "documents.listTitle",
+    "documents.announce",
+    "language.tr",
+    "language.en",
+    "viewer.pageOf",
+}
 
 
 def test_both_dictionaries_have_the_same_keys():

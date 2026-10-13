@@ -1,6 +1,7 @@
 """Retrieval state of a collection. The evidence graph is built on first use by a preset that
 expands through it, and the L5 rankings are the same as with a graph built up front."""
 
+import uuid
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from consultqa.ingest.pipeline import ingest_file
 from consultqa.retrieve.dense import DenseChannel
 from consultqa.retrieve.pipeline import Retriever
 from consultqa.retrieve.sparse import SparseChannel
+from consultqa.store.originals import OriginalFiles
 
 L2 = PRESETS["L2"]
 L5 = PRESETS["L5"]
@@ -23,6 +25,11 @@ QUERIES = [
     "sipariş filtreleme tablo",
     "rapor modülü stok",
 ]
+
+
+def _doc_id(name: str) -> str:
+    # Document ids name files in the originals folder, so they must be 32 lowercase hex characters.
+    return uuid.uuid5(uuid.NAMESPACE_OID, name).hex
 
 
 def _document(number: int) -> str:
@@ -54,11 +61,12 @@ def _collection(svc: Services, tmp_path: Path) -> str:
             dense=svc.dense(cid),
             job_id=job,
             collection_id=cid,
-            doc_id=f"doc{number}",
+            doc_id=_doc_id(f"doc{number}"),
             path=path,
             filename=path.name,
             max_tokens=svc.settings.chunk_max_tokens,
             count_tokens=svc.count_tokens,
+            originals=OriginalFiles(tmp_path / "files"),
         )
         assert written is True
     return cid
@@ -140,11 +148,12 @@ def test_a_changed_collection_gets_a_graph_of_its_current_chunks(collection, tmp
         dense=svc.dense(cid),
         job_id=job,
         collection_id=cid,
-        doc_id="late",
+        doc_id=_doc_id("late"),
         path=path,
         filename=path.name,
         max_tokens=svc.settings.chunk_max_tokens,
         count_tokens=svc.count_tokens,
+        originals=OriginalFiles(tmp_path / "files"),
     )
     svc.invalidate(cid)
     after = svc.index(cid).graph()

@@ -4,6 +4,7 @@ import { ApiError, errorMessage } from "../errors.js";
 import { t } from "../i18n.js";
 import { isReservedLibraryName, libraryLabel } from "../libraries.js";
 import { removePref } from "../prefs.js";
+import { VIEWER_CLOSED } from "../state.js";
 
 export function createCollectionActions({ api, store, documents }) {
   // An older page remembered a folder here. The page always opens on the default library now.
@@ -106,8 +107,10 @@ export function createCollectionActions({ api, store, documents }) {
       documentsLoaded: false,
       documentsMessage: null,
       confirmDeleteId: "",
-      result: null,
+      thread: [],
       askMessage: "",
+      // The open document belonged to the previous folder; the scope choice is kept.
+      ...VIEWER_CLOSED,
     });
     await documents.loadDocuments();
   }

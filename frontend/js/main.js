@@ -6,6 +6,7 @@ import { createCollectionActions } from "./actions/collections.js";
 import { createDocumentActions } from "./actions/documents.js";
 import { createUploadActions } from "./actions/uploads.js";
 import { createAskActions } from "./actions/ask.js";
+import { createViewerActions } from "./actions/viewer.js";
 import { createLanguageActions } from "./actions/language.js";
 import { mountSystemView } from "./views/system.js";
 import { mountCollectionsView } from "./views/collections.js";
@@ -13,7 +14,10 @@ import { mountDropzoneView } from "./views/dropzone.js";
 import { mountDocumentsView } from "./views/documents.js";
 import { mountMethodsView } from "./views/methods.js";
 import { mountAskView } from "./views/ask-form.js";
-import { mountResultView } from "./views/result.js";
+import { mountPanesView } from "./views/panes.js";
+import { mountScopeView } from "./views/scope.js";
+import { mountThreadView } from "./views/thread.js";
+import { mountViewerView } from "./views/viewer.js";
 import { mountThemeView } from "./views/theme.js";
 import { mountLanguageView } from "./views/language.js";
 import { createStore, INITIAL_STATE } from "./state.js";
@@ -24,9 +28,10 @@ const system = createSystemActions({ api, store });
 const documents = createDocumentActions({ api, store });
 const collections = createCollectionActions({ api, store, documents });
 const uploads = createUploadActions({ api, store, documents });
-const ask = createAskActions({ api, store });
+const ask = createAskActions({ api, store, documents });
+const viewer = createViewerActions({ store });
 const language = createLanguageActions({ store, collections });
-const actions = { system, collections, documents, uploads, ask, language };
+const actions = { system, collections, documents, uploads, ask, viewer, language };
 
 try {
   setLanguage(currentLanguage());
@@ -36,9 +41,13 @@ try {
   mountDocumentsView(store, actions);
   mountMethodsView(store, actions);
   mountAskView(store, actions);
-  mountResultView(store);
+  // Theme and language first: they keep working even when a workspace view fails to mount.
   mountThemeView();
   mountLanguageView(store, actions);
+  mountPanesView(store);
+  mountScopeView(store, actions);
+  mountThreadView(store, actions);
+  mountViewerView(store, actions, { api });
 } finally {
   // The page shell was hidden until its text was in place; it can show now.
   document.body.classList.remove("booting");

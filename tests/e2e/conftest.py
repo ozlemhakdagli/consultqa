@@ -56,8 +56,11 @@ def browser(playwright_driver: Playwright) -> Iterator[Browser]:
 
 
 @contextmanager
-def _running_server(driver: Playwright, state_dir: Path) -> Iterator[str]:
+def _running_server(
+    driver: Playwright, state_dir: Path, extra_env: dict[str, str] | None = None
+) -> Iterator[str]:
     """A stub-backend server on a free port with its own state directory, polled until ready.
+    ``extra_env`` is added to its environment (for example ``CONSULTQA_PARSER=pdfium``).
     Readiness is polled through Playwright's HTTP client, because the repository's block_network
     fixture stops Python sockets from connecting."""
     from playwright.sync_api import Error as PlaywrightError
@@ -73,6 +76,7 @@ def _running_server(driver: Playwright, state_dir: Path) -> Iterator[str]:
         "CONSULTQA_MAX_UPLOAD_MB": "1",
         "PYTHONPATH": str(ROOT / "src"),
         "HF_HUB_OFFLINE": "1",
+        **(extra_env or {}),
     }
     log_path = state_dir / "server.log"
     command = [
@@ -108,6 +112,20 @@ def base_url(
 ) -> Iterator[str]:
     """One stub-backend server shared by the tests of the session."""
     with _running_server(playwright_driver, tmp_path_factory.mktemp("consultqa-state")) as url:
+        yield url
+
+
+@pytest.fixture(scope="session")
+def viewer_url(
+    playwright_driver: Playwright, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[str]:
+    """A second stub-backend server whose parser reads PDF text layers (pdfium, no models), so
+    tests can upload real PDFs. The ``base_url`` server is unchanged."""
+    with _running_server(
+        playwright_driver,
+        tmp_path_factory.mktemp("consultqa-viewer-state"),
+        extra_env={"CONSULTQA_PARSER": "pdfium"},
+    ) as url:
         yield url
 
 

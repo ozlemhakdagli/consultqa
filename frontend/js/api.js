@@ -41,6 +41,23 @@ export function createApi({ fetchImpl = (...args) => fetch(...args) } = {}) {
     return call(`${collection(cid)}/documents`, { method: "POST", body: form });
   }
 
+  const documentFileUrl = (cid, docId) =>
+    `${collection(cid)}/documents/${encodeURIComponent(docId)}/file`;
+
+  // The text of a document's text copy. Not parsed as JSON: a failure body still carries the code.
+  async function documentText(cid, docId) {
+    let response;
+    try {
+      response = await fetchImpl(documentFileUrl(cid, docId));
+    } catch {
+      throw new ApiError("network_error");
+    }
+    if (!response.ok) {
+      throw new ApiError(codeOf(await readJson(response)), response.status);
+    }
+    return response.text();
+  }
+
   return {
     capabilities: () => call("/api/capabilities"),
     listCollections: () => call("/api/collections"),
@@ -50,8 +67,13 @@ export function createApi({ fetchImpl = (...args) => fetch(...args) } = {}) {
     deleteDocument: (cid, docId) =>
       call(`${collection(cid)}/documents/${encodeURIComponent(docId)}`, { method: "DELETE" }),
     getJob: (jobId) => call(`/api/jobs/${encodeURIComponent(jobId)}`),
-    ask: (cid, question, preset) =>
-      call(`${collection(cid)}/ask`, { method: "POST", json: { question, preset } }),
+    ask: (cid, question, preset, docId = "") =>
+      call(`${collection(cid)}/ask`, {
+        method: "POST",
+        json: docId ? { question, preset, doc_id: docId } : { question, preset },
+      }),
     uploadDocument,
+    documentFileUrl,
+    documentText,
   };
 }
