@@ -82,7 +82,7 @@ Below 1000 px of width the panes become tabs above the content, and one pane sho
 
 The steps are:
 
-1. **Add your documents** (Belgelerinizi ekleyin). Drop PDF, TXT or Markdown files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed in the background. A ready document has an **Open** button (`Open {name}` / `{name} belgesini aç`) that shows it in the Document pane.
+1. **Add your documents** (Belgelerinizi ekleyin). Drop PDF, TXT or Markdown files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed in the background. A ready document has an **Open** button (`Open {name}` / `{name} belgesini aç`) that shows it in the Document pane, and a **Delete** button (`Sil`) that removes the document and its original. Deleting the open document closes the Document pane.
 2. **Type your question** (Sorunuzu yazın). Type the question in the chat pane and press "Find the answer" (Cevabı bul). The question and its answer stay on the page, one after another, so you can compare them. Each question is answered on its own. Earlier questions are not remembered. The answer appears with the document and section it came from, and the whole source passage is shown. The sentence that holds the answer is marked.
 3. **Read the source.** Each source of a PDF has a page button, "Page n" (Sayfa n). It opens that page in the Document pane and marks the answer sentence on it. The pages related to the question are listed under "Related pages" (İlgili sayfalar); their buttons open the page without a mark. If the sentence cannot be found on the page, the page still opens and the viewer says so.
 
