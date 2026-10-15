@@ -207,8 +207,8 @@ progress {
 }
 
 .doc-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px 12px;
   align-items: center;
   padding: 12px 0;
@@ -217,8 +217,16 @@ progress {
 
 .doc-main {
   display: grid;
+  flex: 1 1 12rem;
   gap: 4px;
   min-width: 0;
+}
+
+/* The buttons keep their size and wrap below the name when the pane is narrow. */
+.doc-row > .button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .doc-name {
@@ -254,7 +262,7 @@ progress {
 }
 
 .doc-confirm {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

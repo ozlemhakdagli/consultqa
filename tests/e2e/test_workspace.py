@@ -254,3 +254,18 @@ def test_the_labels_follow_the_language_switch(page, viewer_url):
     expect(page.locator("#viewer-empty")).to_have_text(
         "Open a document, or press a page button in an answer, to see the source."
     )
+
+
+def test_a_document_row_shows_its_name_and_status_beside_its_buttons(page, base_url):
+    # The row has a name, an Open button and a Delete button. The name and the status must keep a
+    # readable width at a wide screen, not be squeezed into a sliver by the buttons.
+    open_page(page, base_url)
+    new_library(page, base_url)
+    upload_and_wait(page, "rapor.txt", "Stok modülü performans iyileştirmesi yapıldı.")
+    row = page.locator(".doc-row").filter(has_text="rapor.txt")
+    expect(row.locator(".doc-status")).to_have_text(re.compile("Ready|hazır", re.I))
+    name_box = row.locator(".doc-main").bounding_box()
+    assert name_box is not None and name_box["width"] >= 160, name_box
+    page.set_viewport_size({"width": 1280, "height": 800})
+    name_box = row.locator(".doc-main").bounding_box()
+    assert name_box is not None and name_box["width"] >= 160, name_box
