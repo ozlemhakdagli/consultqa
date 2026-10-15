@@ -70,15 +70,31 @@ Then open **http://127.0.0.1:8000/**. To check the service without downloading m
 
 ## Using the page
 
-The page is in Turkish and English and works in three steps. It opens in Turkish when the browser language is Turkish and in English otherwise; the switch in the top bar (Türkçe / English) changes it, and the choice is saved in the browser. The steps are called:
+The page is in Turkish and English. It opens in Turkish when the browser language is Turkish and in English otherwise; the switch in the top bar (Türkçe / English) changes it, and the choice is saved in the browser. A theme switch (Automatic (Otomatik), Light (Açık), Dark (Koyu)) is saved in the browser too.
 
-1. **Add your documents** (Belgelerinizi ekleyin). Drop files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed; this runs in the background.
-2. **Type your question** (Sorunuzu yazın). Ask in your own words. Example questions are one click away.
-3. **Answer** (Cevap). The answer appears with the document and section it came from. The whole source text is shown, with the sentence that contains the answer highlighted.
+The page has three panes side by side:
 
-The page uses one default library, shown as "My documents" ("Belgelerim" in Turkish) and created on your first visit. It is stored under the fixed name `Belgelerim` in both languages, so switching the language never creates a second library. Other libraries and the answer methods other than the recommended one are under "Advanced options" ("Gelişmiş seçenekler"), closed by default. A theme switch (Automatic, Light, Dark; Otomatik, Açık, Koyu) is saved in the browser.
+- **Documents** (Belgeler): your documents and the add button.
+- **Document** (Belge): the open document. A PDF is shown page by page with zoom and a page box; a text or Markdown file is shown as plain text.
+- **Chat** (Sohbet): your questions and the answers, one after another, with the scope switch and the question box below them.
 
-The answer is taken from one passage of your document, so it can be short. The page says so. Its source text is always shown.
+Below 1000 px of width the panes become tabs above the content, and one pane shows at a time; the tab row chooses it. From 1000 px the three panes are shown together and the tabs are hidden.
+
+The steps are:
+
+1. **Add your documents** (Belgelerinizi ekleyin). Drop PDF, TXT or Markdown files on the area or choose them. Each file shows its status: uploading, preparing, ready, or an error. Files are read, split into passages and indexed in the background. A ready document has an **Open** button (`Open {name}` / `{name} belgesini aç`) that shows it in the Document pane, and a **Delete** button (`Sil`) that removes the document and its original. Deleting the open document closes the Document pane.
+2. **Type your question** (Sorunuzu yazın). Type the question in the chat pane and press "Find the answer" (Cevabı bul). The question and its answer stay on the page, one after another, so you can compare them. Each question is answered on its own. Earlier questions are not remembered. The answer appears with the document and section it came from, and the whole source passage is shown. The sentence that holds the answer is marked.
+3. **Read the source.** Each source of a PDF has a page button, "Page n" (Sayfa n). It opens that page in the Document pane and marks the answer sentence on it. The pages related to the question are listed under "Related pages" (İlgili sayfalar); their buttons open the page without a mark. If the sentence cannot be found on the page, the page still opens and the viewer says so.
+
+**Scope.** "Where should the question look?" (Soru nerede aransın?) has two choices. "In this document" (Bu belgede) searches only the open document; "In the whole folder" (Tüm klasörde) searches every document of the folder. Opening a document selects "In this document". The choice is read when a question is asked, and each answer shows the scope it was asked with. Without an open document only the whole folder can be searched.
+
+**Select and ask.** Select text in the Document pane. A button under the selection, "Use this text as a question" (Bu metni soru olarak yaz), copies it into the question box without sending it. Change the text if you like, then press "Find the answer" (Cevabı bul).
+
+**Default library:** the page uses one library, shown as "My documents" ("Belgelerim" in Turkish). It is created on your first visit and stored under the fixed name `Belgelerim` in both languages, so switching the language never creates a second library. Other libraries and the answer methods other than the recommended one are under "Advanced options" ("Gelişmiş seçenekler"), closed by default.
+
+**Where the originals are kept.** The service keeps the uploaded original of each document in the state folder, so the Document pane can show it later. With Docker that folder is the `state` volume (`/app/state/files`); otherwise it is `files` inside `CONSULTQA_STATE_DIR`. Deleting a document also deletes its original. Documents uploaded before the viewer existed have no original and no page numbers. They still answer questions, but the viewer says that the document was added before the viewer existed. To open such a document in the viewer, remove it and add the file again. The page does not add the same content twice in one folder, so the file must be removed first.
+
+The answer is taken from one passage of your document, so it can be short. The answer card says so. Its source text is always shown.
 
 ## Languages
 
@@ -108,8 +124,13 @@ curl -s -X POST http://127.0.0.1:8000/api/collections/<collection_id>/ask \
 - `GET /api/presets` lists the preset names. `GET /api/capabilities` reports readiness, upload limits, the default preset and which methods are available.
 - The default preset is `L2`. Pass `preset` to use another one.
 - Uploads are limited to 20 MB by default (`CONSULTQA_MAX_UPLOAD_MB`).
+- `CONSULTQA_PARSER` chooses the PDF reader: `docling` (the default, with the models) or `pdfium`, which reads a PDF's text layer without the Docling models. The browser tests use `pdfium`.
 - Errors use the body `{"detail": "<code>"}`, for example `not_ready`, `busy`, `llm_unavailable`, `vector_store_unavailable`.
 - Every message is a code (for example `not_ready`, `llm_unavailable`), never a sentence in a language; the page turns codes into Turkish or English text.
+- `POST /api/collections/<collection_id>/ask` and `.../search` take an optional `doc_id`, which limits the question or the search to one document of the folder. An unknown or foreign id gives `404` with `document_not_found`.
+- `GET /api/collections/<collection_id>/documents/<doc_id>/file` returns the stored original of a document, inline. It gives `404` with `file_not_found` when the document has no original (uploaded before the viewer existed).
+- `GET /api/collections/<collection_id>/documents` lists each document with `filename`, `kind` (`pdf` or `text`), `page_count` and `has_original`.
+- Each citation of an answer has its `page` (1-based; `null` for text and Markdown files and for documents uploaded before pages were kept). The answer's `related` list holds one passage per page of its sources.
 
 ## Results
 
@@ -227,6 +248,7 @@ The protocol ordering is evidenced by the file hashes in `experiments/protocol.j
 
 - `src/consultqa/`: the service (`api/`), ingestion (`ingest/`), storage (`store/`), retrieval (`retrieve/`), the evidence graph (`graph/`), readers (`generate/`) and evaluation (`eval/`).
 - `frontend/`: the web page (plain ES modules, no build step), served from `CONSULTQA_FRONTEND_DIR` (`/app/frontend` in the image).
+- `frontend/vendor/pdfjs/`: the bundled pdf.js library, which draws the PDF in the viewer pane (licence and notice in `frontend/vendor/pdfjs/LICENSE` and [NOTICE](NOTICE)).
 - `reference/paper_method/`: the published method.
 - `data/sample/`: the public synthetic corpus and questions. The sample PDFs in `data/sample/pdf/` are generated by `scripts/make_sample_pdfs.py` and are not tracked.
 - `experiments/`: the protocol and the result tables with their run headers.
@@ -234,4 +256,4 @@ The protocol ordering is evidenced by the file hashes in `experiments/protocol.j
 
 ## Licence
 
-Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). The PDF parser is Docling (MIT). The model weights are downloaded separately and keep their own licences.
+Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). The PDF parser is Docling (MIT). The PDF viewer is the bundled pdf.js 4.10.38 (Apache-2.0, see [NOTICE](NOTICE)). The model weights are downloaded separately and keep their own licences.

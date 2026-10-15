@@ -5,7 +5,7 @@ and no chunk crosses a heading boundary.
 """
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 
 from consultqa.models import Chunk
@@ -48,10 +48,16 @@ def _blocks(text: str) -> Iterator[str | _Heading]:
         yield "\n".join(lines)
 
 
-def _sections(text: str) -> list[tuple[tuple[str, ...], list[str]]]:
-    """Group paragraphs by the heading path in force where they appear."""
+def _sections(
+    text: str, start_path: tuple[str, ...] = ()
+) -> list[tuple[tuple[str, ...], list[str]]]:
+    """Group paragraphs by the heading path in force where they appear.
+
+    ``start_path`` is the path in force before the first heading. The last section always
+    carries the path in force at the end of the text.
+    """
     sections: list[tuple[tuple[str, ...], list[str]]] = []
-    path: tuple[str, ...] = ()
+    path = start_path
     paragraphs: list[str] = []
     for block in _blocks(text):
         if isinstance(block, _Heading):
@@ -161,6 +167,41 @@ def _pack_section(paragraphs: list[str], budget: _Budget) -> list[str]:
     return texts
 
 
+def _make_budget(max_tokens: int, count_tokens: Callable[[str], int]) -> _Budget:
+    paragraph_join, word_join = _join_costs(count_tokens)
+    return _Budget(max_tokens, count_tokens, paragraph_join, word_join)
+
+
+def _chunk_text(
+    text: str, budget: _Budget, start_path: tuple[str, ...]
+) -> tuple[list[tuple[tuple[str, ...], str]], tuple[str, ...]]:
+    """Pack one text into (heading path, piece) pairs, and return the path in force at its end."""
+    sections = _sections(text, start_path)
+    pieces = [
+        (heading_path, piece)
+        for heading_path, paragraphs in sections
+        for piece in _pack_section(paragraphs, budget)
+    ]
+    return pieces, sections[-1][0]
+
+
+def _make_chunk(
+    doc_id: str,
+    position: int,
+    heading_path: tuple[str, ...],
+    text: str,
+    page: int | None = None,
+) -> Chunk:
+    return Chunk(
+        chunk_id=f"{doc_id}#{position}",
+        doc_id=doc_id,
+        position=position,
+        heading_path=heading_path,
+        text=text,
+        page=page,
+    )
+
+
 def chunk_markdown(
     doc_id: str,
     text: str,
@@ -175,19 +216,33 @@ def chunk_markdown(
     text whole for counts of this kind: word counts, character counts, and tokenizers that add a
     fixed number of special tokens to each text.
     """
-    paragraph_join, word_join = _join_costs(count_tokens)
-    budget = _Budget(max_tokens, count_tokens, paragraph_join, word_join)
-    pieces: list[tuple[tuple[str, ...], str]] = []
-    for heading_path, paragraphs in _sections(text):
-        for piece in _pack_section(paragraphs, budget):
-            pieces.append((heading_path, piece))
+    budget = _make_budget(max_tokens, count_tokens)
+    pieces, _ = _chunk_text(text, budget, ())
     return [
-        Chunk(
-            chunk_id=f"{doc_id}#{position}",
-            doc_id=doc_id,
-            position=position,
-            heading_path=heading_path,
-            text=piece,
-        )
+        _make_chunk(doc_id, position, heading_path, piece)
         for position, (heading_path, piece) in enumerate(pieces)
     ]
+
+
+def chunk_pages(
+    doc_id: str,
+    pages: Sequence[str],
+    *,
+    max_tokens: int,
+    count_tokens: Callable[[str], int] = count_words,
+) -> list[Chunk]:
+    """Chunk the text of each page on its own. ``Chunk.page`` is the 1-based page number, and the
+    chunk positions run on across the pages.
+
+    A page never shares a chunk with another page. The heading path in force at the end of a
+    page is the starting path of the next page, so a section that runs over a page break keeps
+    its path. A page with no text gives no chunks but still counts in the page numbers.
+    """
+    budget = _make_budget(max_tokens, count_tokens)
+    chunks: list[Chunk] = []
+    path: tuple[str, ...] = ()
+    for page_number, page_text in enumerate(pages, start=1):
+        pieces, path = _chunk_text(page_text, budget, path)
+        for heading_path, piece in pieces:
+            chunks.append(_make_chunk(doc_id, len(chunks), heading_path, piece, page=page_number))
+    return chunks

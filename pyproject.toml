@@ -11,7 +11,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 
 [project.optional-dependencies]
-core = ["numpy==2.4.6", "scipy==1.17.1", "rank-bm25==0.2.2"]
+core = ["numpy==2.4.6", "scipy==1.17.1", "rank-bm25==0.2.2", "pypdfium2==5.14.0"]
 ml = [
     "sentence-transformers==5.7.0",
     "transformers==4.57.6",

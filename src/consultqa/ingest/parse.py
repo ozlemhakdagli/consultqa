@@ -4,8 +4,11 @@ Parsers raise ``ParseError`` with a stable code, and the ingestion job stores th
 """
 
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
+
+T = TypeVar("T")
 
 
 class ParseError(Exception):
@@ -23,6 +26,9 @@ class Parser(Protocol):
     suffixes: frozenset[str]
 
     def parse(self, path: Path) -> str: ...
+
+    def parse_pages(self, path: Path) -> list[str]:
+        """Return one Markdown string per page, in page order. A page with no text is ``""``."""
 
     def warm_up(self) -> None:
         """Load what the parser needs before its first file. Calling it again does nothing."""
@@ -48,6 +54,9 @@ class TextParser:
             return path.read_text(encoding="utf-8")
         except UnicodeDecodeError as exc:
             raise ParseError("parse_failed") from exc
+
+    def parse_pages(self, path: Path) -> list[str]:
+        return [self.parse(path)]
 
 
 class DoclingParser:
@@ -113,7 +122,11 @@ class DoclingParser:
                 torch.set_num_threads(threads)
             self._warmed = True
 
-    def parse(self, path: Path) -> str:
+    def _convert(self, path: Path, export: Callable[[Any, int], T]) -> T:
+        """Convert the file once and return ``export(document, page_count)``.
+
+        The page limit is checked after the conversion, as in ``parse``.
+        """
         _check_suffix(path, self.suffixes)
         import torch
 
@@ -134,16 +147,28 @@ class DoclingParser:
                     ConversionStatus.SUCCESS,
                     ConversionStatus.PARTIAL_SUCCESS,
                 )
-                markdown = result.document.export_to_markdown() if converted else None
+                output = export(result.document, pages) if converted else None
             except Exception as exc:
                 raise ParseError("parse_failed") from exc
             finally:
                 torch.set_num_threads(threads)
         if pages > self.max_pages:
             raise ParseError("too_many_pages")
-        if markdown is None:
+        if output is None:
             raise ParseError("parse_failed")
-        return markdown
+        return output
+
+    def parse(self, path: Path) -> str:
+        return self._convert(path, lambda document, _pages: document.export_to_markdown())
+
+    def parse_pages(self, path: Path) -> list[str]:
+        # The document is converted once; each page is then exported from that conversion.
+        return self._convert(
+            path,
+            lambda document, pages: [
+                document.export_to_markdown(page_no=number) for number in range(1, pages + 1)
+            ],
+        )
 
 
 class DocumentParser:
@@ -165,9 +190,20 @@ class DocumentParser:
             return self._pdf.parse(path)
         return self._text.parse(path)
 
+    def parse_pages(self, path: Path) -> list[str]:
+        _check_suffix(path, self.suffixes)
+        if path.suffix.lower() == ".pdf":
+            return self._pdf.parse_pages(path)
+        return self._text.parse_pages(path)
+
 
 def get_parser(name: str, *, max_pages: int, artifacts_path: Path | None = None) -> Parser:
-    """Return the parser registered under ``name``. The only registered name is ``docling``."""
+    """Return the parser registered under ``name``: ``docling`` (the default) or ``pdfium``."""
     if name == "docling":
         return DocumentParser(max_pages=max_pages, artifacts_path=artifacts_path)
+    if name == "pdfium":
+        # Imported here: pdfium.py imports this module for ParseError and TextParser.
+        from consultqa.ingest.pdfium import PdfiumParser
+
+        return PdfiumParser(max_pages=max_pages)
     raise ValueError(f"unknown parser: {name!r}")

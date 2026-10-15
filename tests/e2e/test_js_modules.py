@@ -830,17 +830,18 @@ def test_ask_stores_an_answer_a_not_found_and_an_error(page, base_url):
         const calls = [];
         const api = { ask: async (cid, question, preset) => { calls.push([cid, question, preset]); return replies.shift()(); } };
         const { store, actions } = make(api);
+        const last = () => store.get().thread.at(-1).result;
         const out = [];
         actions.selectPreset('L4+llm');
         await actions.askQuestion('  Soru bir?  ');
-        out.push(store.get().result.kind, store.get().result.usesLlm, store.get().result.isRecommended);
+        out.push(last().kind, last().usesLlm, last().isRecommended);
         actions.selectPreset('L2');
         await actions.askQuestion('Soru iki?');
-        out.push(store.get().result.kind);
+        out.push(last().kind);
         await actions.askQuestion('Soru üç?');
-        out.push(store.get().result.kind, store.get().result.code);
+        out.push(last().kind, last().code);
         await actions.askQuestion('Soru dört?');
-        out.push(store.get().result.code, store.get().asking);
+        out.push(last().code, store.get().asking);
         return [out, calls[0]];
     """,
     )
@@ -865,15 +866,16 @@ def test_ask_keeps_the_previous_result_while_the_next_question_is_searched(page,
         const api = { ask: async () => replies.shift()() };
         const { store, actions } = make(api);
         await actions.askQuestion('Soru bir?');
-        const first = store.get().result.answer;
+        const turns = () => store.get().thread;
+        const first = turns().at(-1).result.answer;
         const second = actions.askQuestion('Soru iki?');
-        const during = [store.get().asking, store.get().result.answer];
+        const during = [store.get().asking, turns().length, turns()[0].result.answer, turns().at(-1).pending];
         gate();
         await second;
-        return [first, during, store.get().result.answer, store.get().asking];
+        return [first, during, turns().at(-1).result.answer, store.get().asking];
     """,
     )
-    assert result == ["Bir", [True, "Bir"], "İki", False]
+    assert result == ["Bir", [True, 2, "Bir", True], "İki", False]
 
 
 def test_ask_ignores_a_blank_question_and_a_second_call_while_asking(page, base_url):

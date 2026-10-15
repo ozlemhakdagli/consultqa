@@ -113,6 +113,40 @@ export const TR = Object.freeze({
   "method.paper.summary": "Aynı konudaki yayımlanmış bir makalenin yöntemidir; cevabı en ilgili yerden alır.",
   "method.paper.note": "Yalnızca karşılaştırma içindir. Denemede “Hızlı ve doğru” yöntemden belirgin biçimde daha kötü sonuç verdi.",
 
+  "panes.legend": "Bölümler",
+  "panes.documents": "Belgeler",
+  "panes.viewer": "Belge",
+  "panes.chat": "Sohbet",
+
+  "viewer.empty": "Kaynağı görmek için bir belge açın ya da bir cevaptaki sayfa düğmesine basın.",
+  "viewer.pageLabel": "Sayfa",
+  "viewer.pageOf": "/ {count}",
+  "viewer.zoomIn": "Yakınlaştır",
+  "viewer.zoomOut": "Uzaklaştır",
+  "viewer.fitWidth": "Genişliğe sığdır",
+  "viewer.loading": "Belge açılıyor…",
+  "viewer.cantShow": "Bu dosya gösterilemiyor, yalnızca metni var.",
+  "viewer.oldDocument": "Bu belge görüntüleyiciden önce eklendi. Burada görmek için belgeyi kaldırıp yeniden ekleyin.",
+  "viewer.noHighlight": "Sayfa açıldı, ama cevap cümlesi sayfada işaretlenemedi.",
+  "viewer.selectionAsk": "Bu metni soru olarak yaz",
+
+  "documents.open": "{name} belgesini aç",
+
+  "scope.legend": "Soru nerede aransın?",
+  "scope.document": "Bu belgede",
+  "scope.folder": "Tüm klasörde",
+  "scope.noDocument": "Açık belge yok, bu yüzden tüm klasörde aranır.",
+
+  "thread.independent": "Her soru ayrı cevaplanır, önceki sorular hatırlanmaz.",
+  "thread.scopeDocument": "{document} içinde",
+  "thread.scopeFolder": "Tüm klasörde",
+
+  "result.pageButton": "Sayfa {page}",
+  "result.pageButtonLabel": "Sayfa {page}: {document} belgesinde göster",
+  "result.relatedTitle": "İlgili sayfalar",
+  "result.relatedLabel": "Sayfa {page}: {document}",
+  "result.sourcePage": "Sayfa: {page}",
+
   "answer.title": "Cevap",
   "answer.empty": "Cevabınız burada görünecek.",
   "answer.llmOff": "Yapay zekâ ile cevap yazma bu sistemde kapalı; bu yüzden cevaplar belgeden alınan kısa kesitlerdir.",
@@ -142,6 +176,7 @@ export const TR = Object.freeze({
   "error.collection_exists": "Bu adda bir klasör zaten var. Başka bir ad yazın ya da listeden o klasörü seçin.",
   "error.collection_busy": "Bu klasörde belge hazırlanıyor. Bittikten sonra tekrar deneyin.",
   "error.document_not_found": "Bu belge artık yok. Liste yenilendi.",
+  "error.file_not_found": "Bu dosya bulunamadı.",
   "error.file_too_large": "Dosya çok büyük.",
   "error.unsupported_type": "Bu dosya türü desteklenmiyor. PDF veya metin dosyası ekleyin.",
   "error.preset_unavailable": "Seçtiğiniz yöntem şu anda kullanılamıyor. Başka bir yöntem seçin.",

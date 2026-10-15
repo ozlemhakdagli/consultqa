@@ -10,7 +10,7 @@ from weakref import WeakKeyDictionary
 from playwright.sync_api import expect
 
 if TYPE_CHECKING:
-    from playwright.sync_api import Page
+    from playwright.sync_api import Locator, Page
 
 # The folder a test recorded for each page; open_page chooses it (the page keeps no choice).
 _LIBRARIES: WeakKeyDictionary[Page, str] = WeakKeyDictionary()
@@ -142,3 +142,23 @@ def caps_without_llm(page: Page, base_url: str) -> dict[str, Any]:
             preset["available"] = False
             preset["reason"] = "llm_not_configured"
     return caps
+
+
+def last_turn(page: Page) -> Locator:
+    """The newest question of the thread: its section in the answer area."""
+    return page.locator("#result .turn").last
+
+
+def newest_title(page: Page) -> Locator:
+    """The heading of the newest answer, not-found or error card (the one that takes focus)."""
+    return last_turn(page).locator(".result-title")
+
+
+def source_card(page: Page, number: int = 1) -> Locator:
+    """A source card of the newest answer; ``number`` is its place in the list, from 1."""
+    return last_turn(page).locator(".citation-card").nth(number - 1)
+
+
+def source_passage(page: Page, number: int = 1) -> Locator:
+    """The whole passage text of a source card of the newest answer."""
+    return source_card(page, number).locator(".source-passage")

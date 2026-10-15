@@ -6,25 +6,6 @@
   border-radius: var(--radius);
 }
 
-.card h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1.3rem;
-}
-
-.step-number {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 1rem;
-}
-
 .lede,
 .help {
   color: var(--muted);
@@ -226,8 +207,8 @@ progress {
 }
 
 .doc-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px 12px;
   align-items: center;
   padding: 12px 0;
@@ -236,8 +217,16 @@ progress {
 
 .doc-main {
   display: grid;
+  flex: 1 1 12rem;
   gap: 4px;
   min-width: 0;
+}
+
+/* The buttons keep their size and wrap below the name when the pane is narrow. */
+.doc-row > .button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .doc-name {
@@ -273,7 +262,7 @@ progress {
 }
 
 .doc-confirm {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -358,10 +347,6 @@ legend {
 
 .result {
   margin-top: 16px;
-}
-
-.result[aria-busy="true"] {
-  opacity: 0.55;
 }
 
 .loading {
@@ -494,7 +479,7 @@ legend {
 }
 
 #question {
-  min-height: 120px;
+  min-height: 96px;
   font-size: 1.1rem;
 }
 
@@ -522,4 +507,227 @@ legend {
 .button-large {
   min-height: 52px;
   font-size: 1.1rem;
+}
+
+/* Pane tabs: the three panes, one shown at a time below 1000 px. */
+.pane-tab {
+  min-height: 48px;
+  padding: 8px 6px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pane-tab:first-child {
+  border-left: 0;
+}
+
+.pane-tab[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.pane-tab:focus-visible {
+  outline-offset: -3px;
+}
+
+/* Where the question looks: a radio pair in a bordered box. */
+.scope-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scope-switch legend {
+  width: 100%;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+.scope-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scope-option:has(input:checked) {
+  color: var(--accent);
+}
+
+.scope-option:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.answer-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.answer-area h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* Viewer: a toolbar of small controls above the document. */
+.viewer-toolbar label {
+  margin: 0;
+}
+
+.viewer-toolbar input,
+.viewer-toolbar button {
+  width: auto;
+}
+
+.viewer-toolbar input {
+  width: 6.5rem;
+}
+
+.viewer-page-count {
+  color: var(--muted);
+}
+
+.viewer-canvas {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+}
+
+.viewer-pdf {
+  position: relative;
+}
+
+.viewer-text {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--code-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.viewer-message {
+  margin: 0;
+}
+
+/* The sentence that is marked on a page in the viewer. */
+/* pdf.js puts this class on text-layer spans, which are transparent over the page image. A
+   translucent wash keeps the glyphs readable in both themes. */
+.pdf-highlight,
+.textLayer .pdf-highlight {
+  padding: 0 2px;
+  background: color-mix(in srgb, var(--mark-bg) 55%, transparent);
+  border-radius: 2px;
+}
+
+/* The button that appears over a text the user selects in the viewer. */
+.selection-ask-button {
+  position: fixed;
+  z-index: 3;
+  width: auto;
+  min-height: 44px;
+  padding: 8px 14px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* One question and its answer in the chat pane. */
+.turn {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.turn:last-child {
+  border-bottom: 0;
+}
+
+.turn-question {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+
+.turn-scope {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* The pages that hold an answer's sources, as buttons. */
+.related-pages {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-button {
+  width: auto;
+  min-height: 44px;
+  padding: 6px 14px;
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The document list: the open button, and the row that is open. */
+.doc-open {
+  width: auto;
+  min-height: 44px;
+  padding: 6px 14px;
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.doc-row.doc-row-open {
+  padding-left: 8px;
+  background: var(--info-bg);
+  box-shadow: inset 4px 0 0 var(--accent);
+  border-radius: var(--radius);
 }

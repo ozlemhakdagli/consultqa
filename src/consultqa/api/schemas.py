@@ -21,18 +21,21 @@ class CreateCollection(BaseModel):
 
 
 class AskRequest(BaseModel):
-    """Body of a question. ``k`` is the number of passages the LLM reader sees."""
+    """Body of a question. ``k`` is the number of passages the LLM reader sees. ``doc_id`` limits
+    the question to one document of the folder."""
 
     question: BoundedText
     preset: str = DEFAULT_PRESET
     k: int | None = Field(default=None, ge=1, le=20)
+    doc_id: str | None = Field(default=None, max_length=64)
 
 
 class SearchRequest(BaseModel):
-    """Body of a passage search request."""
+    """Body of a passage search request. ``doc_id`` limits the search to one document."""
 
     query: BoundedText
     k: int = Field(default=5, ge=1, le=20)
+    doc_id: str | None = Field(default=None, max_length=64)
 
 
 class Citation(BaseModel):
@@ -43,6 +46,16 @@ class Citation(BaseModel):
     doc_id: str
     heading_path: list[str]
     text: str
+    page: int | None
+
+
+class RelatedPage(BaseModel):
+    """The top passage of one page of the answer's sources, for the page to link to."""
+
+    chunk_id: str
+    doc_id: str
+    page: int | None
+    heading_path: list[str]
 
 
 class TraceItem(BaseModel):
@@ -61,6 +74,7 @@ class AskResponse(BaseModel):
 
     answer: str | None
     citations: list[Citation]
+    related: list[RelatedPage]
     trace: list[TraceItem]
     preset: str
     latency_ms: float

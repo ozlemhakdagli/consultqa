@@ -17,6 +17,26 @@ export function documentNames(state) {
   return new Map(state.documents.map((document) => [document.id, document.filename]));
 }
 
+// What the workspace shows of each document, by its id. A document without the flag has no original.
+export function documentInfo(state) {
+  return new Map(
+    state.documents.map((doc) => [
+      doc.id,
+      {
+        filename: doc.filename,
+        kind: doc.kind,
+        pageCount: doc.page_count ?? null,
+        hasOriginal: Boolean(doc.has_original),
+      },
+    ]),
+  );
+}
+
+// The document a question is limited to: the open one when the scope is the document, else none.
+export function effectiveScopeDocId(state) {
+  return state.scope === "document" ? (state.openDocId ?? "") : "";
+}
+
 export function isPresetAvailable(capabilities, name) {
   if (!capabilities) return false;
   return capabilities.presets.some((preset) => preset.name === name && preset.available);

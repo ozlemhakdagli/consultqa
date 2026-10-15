@@ -8,6 +8,12 @@ pytestmark = pytest.mark.e2e
 ASK_BUTTON = "Cevabı bul"
 
 
+def _chat_tab_on_a_narrow_screen(page):
+    """Below 1000 px only one pane shows; the chat pane is chosen with its tab, as a person would."""
+    if page.viewport_size["width"] < 1000:
+        page.locator("#tab-chat").click()
+
+
 @pytest.mark.usefixtures("fast_job_polling")
 def test_every_control_has_an_accessible_name(page, base_url):
     collection_with_document(page, base_url)
@@ -33,7 +39,7 @@ def test_the_ask_form_works_with_the_keyboard_alone(page, base_url):
     else:
         pytest.fail("the submit button cannot be reached with Tab")
     page.keyboard.press("Enter")
-    expect(page.locator("#result-title")).to_be_focused()
+    expect(page.locator(".result-title")).to_be_focused()
 
 
 # Review Focus 5
@@ -46,9 +52,16 @@ def test_no_horizontal_scroll_on_a_phone(make_page, base_url):
         filename=long_name,
         content="# " + "y" * 120 + "\n\n" + "z" * 150 + " Stok.\n",
     )
+    # The long file name is in the documents tab, which is the one shown first.
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    _chat_tab_on_a_narrow_screen(page)
     page.get_by_label("Sorunuz", exact=True).fill("Stok")
     page.get_by_role("button", name="Cevabı bul").click()
-    expect(page.locator("#result-title")).to_be_visible()
+    expect(page.locator(".result-title")).to_be_visible()
+    # The answer area is its own scroller below 1000 px: it must not scroll sideways either.
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    assert page.locator("#step-answer").evaluate("el => el.scrollWidth <= el.clientWidth")
+    page.locator("#tab-viewer").click()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 

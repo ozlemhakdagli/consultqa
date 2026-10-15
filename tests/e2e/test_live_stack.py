@@ -12,7 +12,10 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
-from ui_helpers import open_advanced
+from ui_helpers import (
+    newest_title,
+    open_advanced,
+)
 
 LIVE_URL = os.environ.get("CONSULTQA_LIVE_URL")
 COLLECTION = os.environ.get("CONSULTQA_LIVE_COLLECTION")
@@ -55,5 +58,5 @@ def test_live_ask_on_an_existing_collection(page):
     page.locator("#collection-select").select_option(label=COLLECTION)
     page.get_by_label("Sorunuz", exact=True).fill(QUESTION)
     page.get_by_role("button", name="Cevabı bul").click()
-    expect(page.locator("#result-title")).to_be_visible(timeout=120_000)
+    expect(newest_title(page)).to_be_visible(timeout=120_000)
     expect(page.locator(".error-card")).to_have_count(0)

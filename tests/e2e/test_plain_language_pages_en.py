@@ -55,7 +55,7 @@ def test_answer_not_found_and_error_states_are_plain_in_english(make_page, base_
     open_page(page, base_url)
     upload_and_wait(page, "policy.md", ENGLISH, "en")
     _ask(page)
-    expect(page.locator("#result-title")).to_be_visible()
+    expect(page.locator(".result-title")).to_be_visible()
     open_advanced(page)
     _clean(page)
     page.route(

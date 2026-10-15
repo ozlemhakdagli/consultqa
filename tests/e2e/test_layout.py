@@ -1,4 +1,4 @@
-"""The layout: a top bar, two columns on wide screens, one column in reading order on phones."""
+"""The layout: three panes side by side on wide screens, one pane at a time under the tabs."""
 
 import pytest
 from playwright.sync_api import expect
@@ -6,37 +6,62 @@ from ui_helpers import collection_with_document, open_advanced, open_page
 
 pytestmark = pytest.mark.e2e
 ASK = "Cevabı bul"
-IDS = ("step-documents", "step-ask", "step-answer", "advanced")
+PANES = ("pane-documents", "pane-viewer", "pane-chat")
+TABS = (
+    ("tab-documents", "pane-documents"),
+    ("tab-viewer", "pane-viewer"),
+    ("tab-chat", "pane-chat"),
+)
 
 
 def _boxes(page):
-    return [page.locator(f"#{name}").bounding_box() for name in IDS]
+    return [page.locator(f"#{name}").bounding_box() for name in PANES]
 
 
 @pytest.mark.parametrize("width", [1280, 1920])
-def test_wide_screens_use_the_full_width_in_two_columns(make_page, base_url, width):
+def test_wide_screens_use_the_full_width_in_three_panes(make_page, base_url, width):
     page = make_page(width=width, height=900)
     open_page(page, base_url)
+    expect(page.locator("#pane-tabs")).to_be_hidden()
     assert page.locator(".workspace").bounding_box()["width"] >= 0.9 * width
-    docs, ask, answer, advanced = _boxes(page)
-    assert answer["x"] >= docs["x"] + docs["width"]
-    assert abs(answer["y"] - docs["y"]) <= 2
-    assert ask["y"] >= docs["y"] + docs["height"] - 1
-    assert advanced["y"] >= ask["y"] + ask["height"] - 1
-    assert round(docs["x"]) == round(ask["x"]) == round(advanced["x"])
-    assert answer["x"] + answer["width"] <= width
+    docs, viewer, chat = _boxes(page)
+    assert viewer["x"] >= docs["x"] + docs["width"]
+    assert chat["x"] >= viewer["x"] + viewer["width"]
+    assert abs(docs["y"] - viewer["y"]) <= 2
+    assert abs(viewer["y"] - chat["y"]) <= 2
+    assert chat["x"] + chat["width"] <= width
+    # The question form is the dock at the bottom of the chat pane.
+    form = page.locator("#ask-form").bounding_box()
+    assert form["y"] >= chat["y"] + chat["height"] / 2
+    assert form["y"] + form["height"] <= chat["y"] + chat["height"] + 1
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    # The advanced options sit inside the documents pane, not over the next one.
+    open_advanced(page)
+    advanced = page.locator("#advanced").bounding_box()
+    assert advanced["x"] >= docs["x"] - 1
+    assert advanced["x"] + advanced["width"] <= docs["x"] + docs["width"] + 1
 
 
 @pytest.mark.parametrize(("width", "height"), [(390, 844), (768, 1024), (991, 800)])
-def test_narrow_screens_stack_everything_in_reading_order(make_page, base_url, width, height):
+def test_narrow_screens_show_one_pane_under_the_tabs(make_page, base_url, width, height):
     page = make_page(width=width, height=height)
     open_page(page, base_url)
-    boxes = _boxes(page)
-    for upper, lower in zip(boxes, boxes[1:], strict=False):
-        assert lower["y"] >= upper["y"] + upper["height"] - 1
-    assert len({round(box["x"]) for box in boxes}) == 1
-    assert boxes[0]["width"] >= 0.85 * width
+    expect(page.locator("#pane-tabs")).to_be_visible()
+    tabs = [page.locator(f"#{tab}").bounding_box() for tab, _ in TABS]
+    assert len({round(box["y"]) for box in tabs}) == 1
+    assert tabs[0]["x"] < tabs[1]["x"] < tabs[2]["x"]
+    for tab, pane in TABS:
+        page.locator(f"#{tab}").click()
+        expect(page.locator(f"#{pane}")).to_be_visible()
+        for _, other in TABS:
+            if other != pane:
+                expect(page.locator(f"#{other}")).to_be_hidden()
+        box = page.locator(f"#{pane}").bounding_box()
+        assert box["y"] >= tabs[0]["y"] + tabs[0]["height"] - 1
+        # The visible pane and the tab row share one left edge.
+        assert abs(box["x"] - tabs[0]["x"]) <= 1
+        assert box["width"] >= 0.85 * width
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 
 def test_the_answer_stays_in_view_beside_the_form(make_page, base_url):
@@ -46,10 +71,16 @@ def test_the_answer_stays_in_view_beside_the_form(make_page, base_url):
     page.get_by_label("Sorunuz", exact=True).fill("Stok modülü")
     page.get_by_role("button", name=ASK).click()
     expect(page.locator("#result .answer-card")).to_be_visible()
+    expect(page.locator("#result .answer-card").last).to_be_in_viewport()
     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-    assert page.evaluate("window.scrollY") > 0
-    box = page.locator("#step-answer").bounding_box()
-    assert 0 <= box["y"] <= 20 and box["y"] + box["height"] <= 600
+    # The page does not scroll on a wide screen: the panes fit the window, so the chat pane and
+    # its question form stay in view when the answer arrives.
+    assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight")
+    assert page.evaluate("window.scrollY") == 0
+    chat = page.locator("#pane-chat").bounding_box()
+    assert 0 <= chat["y"] and chat["y"] + chat["height"] <= 600
+    form = page.locator("#ask-form").bounding_box()
+    assert 0 <= form["y"] and form["y"] + form["height"] <= 600
 
 
 def test_a_tall_answer_scrolls_inside_its_panel(make_page, base_url):

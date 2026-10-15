@@ -9,7 +9,7 @@ evidence graph for the presets that expand through it) is built on first use and
 import logging
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from consultqa.api.jobs import JobRunner
@@ -22,7 +22,7 @@ from consultqa.generate.prompt import build_messages
 from consultqa.graph.build import EvidenceGraph, build_graph
 from consultqa.ingest.chunk import count_words
 from consultqa.ingest.parse import Parser, get_parser
-from consultqa.models import Chunk
+from consultqa.models import Chunk, Hit
 from consultqa.retrieve.context import build_context
 from consultqa.retrieve.dense import (
     ENCODER_SPECS,
@@ -35,6 +35,7 @@ from consultqa.retrieve.dense import (
 from consultqa.retrieve.pipeline import RetrievalResult, Retriever, TraceEntry
 from consultqa.retrieve.rerank import Scorer, load_cross_encoder
 from consultqa.retrieve.sparse import SparseChannel
+from consultqa.store.originals import OriginalFiles
 from consultqa.store.qdrant_dense import QdrantDenseBackend
 from consultqa.store.sqlite_store import SqliteStore
 from consultqa.stub import HashEncoder, StubLLM, StubReader, StubScorer
@@ -78,11 +79,34 @@ class LLMFailed(Exception):
 
 @dataclass(frozen=True)
 class Answer:
-    """One answer. ``text`` is None when there is none. ``cited`` holds ``(number, chunk)``."""
+    """One answer. ``text`` is None when there is none. ``cited`` holds ``(number, chunk)``.
+    ``related`` holds the top retrieved chunks, one per page (see ``related_chunks``)."""
 
     text: str | None
     cited: list[tuple[int, Chunk]]
     trace: list[TraceEntry]
+    related: list[Chunk] = field(default_factory=list)
+
+
+def related_chunks(hits: Sequence[Hit], limit: int = 5) -> list[Chunk]:
+    """The first chunk of each distinct ``(doc_id, page)`` in rank order, at most ``limit``.
+
+    Chunks without a page are distinct by their id, since a page-less document has no pages to
+    group by.
+    """
+    seen: set[tuple[str, int | str]] = set()
+    related: list[Chunk] = []
+    for hit in hits:
+        chunk = hit.chunk
+        group = chunk.page if chunk.page is not None else chunk.chunk_id
+        key = (chunk.doc_id, group)
+        if key in seen:
+            continue
+        seen.add(key)
+        related.append(chunk)
+        if len(related) == limit:
+            break
+    return related
 
 
 class CollectionIndex:
@@ -112,6 +136,27 @@ class CollectionIndex:
         self._scorer = scorer
         self._retrievers: dict[str, Retriever] = {}
         self._paper: PaperMethod | None = None
+        self._documents: dict[str, CollectionIndex] = {}
+        self._documents_lock = threading.Lock()
+
+    def for_document(self, doc_id: str) -> "CollectionIndex":
+        """The retrieval state of one document, as if the collection held only that document.
+
+        Built on first use and reused; it is dropped together with this index. Raises ``KeyError``
+        when the collection has no chunks of ``doc_id``.
+        """
+        with self._documents_lock:
+            index = self._documents.get(doc_id)
+            if index is None:
+                doc_chunks = self.chunks_by_doc[doc_id]
+                index = CollectionIndex(
+                    doc_chunks,
+                    dense=self._dense.restricted({c.chunk_id: c for c in doc_chunks}),
+                    sparse=SparseChannel(doc_chunks, per_document_fold=True),
+                    scorer=self._scorer,
+                )
+                self._documents[doc_id] = index
+            return index
 
     def graph(self) -> EvidenceGraph:
         """The evidence graph of the chunks, built on first use and then reused."""
@@ -162,6 +207,7 @@ class Services:
     ready: threading.Event
     count_tokens: Callable[[str], int]
     forget_dense: Callable[[str], None]
+    originals: OriginalFiles
     # The real backend leaves ``scorer`` and ``reader`` unset and gives these builders instead; the
     # loader thread calls them after the encoder, so the port opens before the models are in memory.
     load_scorer: Callable[[], Scorer] | None = None
@@ -182,11 +228,13 @@ class Services:
             self._indexes.pop(cid, None)
 
     def delete_collection(self, cid: str) -> bool:
-        """Delete a collection with its documents, chunks, graph, jobs and vectors.
+        """Delete a collection with its documents, chunks, graph, jobs, vectors and original files.
 
         Returns False when there is no such collection. Raises ``CollectionBusy`` while one of its
         jobs has not finished, and then removes nothing. The vectors go before the rows, so a vector
-        store that is down leaves the collection whole for a later attempt.
+        store that is down leaves the collection whole for a later attempt. The original files go
+        after the rows, one at a time: a file that cannot be removed is logged and the rest are
+        still removed, and the deletion still returns True.
         """
         try:
             with self.collections_lock, self._lock:
@@ -194,9 +242,15 @@ class Services:
                     return False
                 if self.store.has_active_jobs(cid):
                     raise CollectionBusy(cid)
+                doc_ids = [doc["id"] for doc in self.store.list_documents(cid)]
                 try:
                     self.dense(cid).drop()
                     self.store.delete_collection(cid)
+                    for doc_id in doc_ids:
+                        try:
+                            self.originals.delete(doc_id)
+                        except OSError:
+                            logger.warning("could not remove the original of document %s", doc_id)
                 finally:
                     self.forget_dense(cid)
         finally:
@@ -238,27 +292,50 @@ class Services:
             scorer=self.scorer,
         )
 
-    def search(self, cid: str, cfg: PipelineConfig, query: str, k: int) -> list[TraceEntry]:
+    def search(
+        self,
+        cid: str,
+        cfg: PipelineConfig,
+        query: str,
+        k: int,
+        doc_id: str | None = None,
+    ) -> list[TraceEntry]:
         """The best ``k`` entries of the final ranking: the rerank stage if the preset reranks,
-        otherwise the pool."""
-        result = self.index(cid).retriever(cfg).retrieve(query)
+        otherwise the pool. With ``doc_id`` the search covers that document only."""
+        result = self._scope(cid, doc_id).retriever(cfg).retrieve(query)
         final_stage = "rerank" if cfg.use_reranker else "pool"
         return [entry for entry in result.trace if entry.stage == final_stage][:k]
 
-    def ask(self, cid: str, cfg: PipelineConfig, question: str, k: int | None) -> Answer:
+    def ask(
+        self,
+        cid: str,
+        cfg: PipelineConfig,
+        question: str,
+        k: int | None,
+        doc_id: str | None = None,
+    ) -> Answer:
         """Answer ``question`` with the pipeline of a preset.
 
         An extractive preset gives the reader the best-ranked passage alone, with no neighbours.
         An LLM preset gives the reader ``k`` passages (the preset's ``final_k`` by default) and
-        cites what the reply cites. Raises ``LLMFailed`` if the LLM endpoint fails.
+        cites what the reply cites. With ``doc_id`` the question covers that document only.
+        Raises ``LLMFailed`` if the LLM endpoint fails.
         """
-        index = self.index(cid)
+        index = self._scope(cid, doc_id)
         result = index.retriever(cfg).retrieve(question)
         if not result.hits:
             return Answer(None, [], result.trace)
         if cfg.reader == "llm":
-            return self._ask_llm(index, cfg, question, result, k)
-        return self._ask_extractive(index, cfg, question, result)
+            answer = self._ask_llm(index, cfg, question, result, k)
+        else:
+            answer = self._ask_extractive(index, cfg, question, result)
+        return replace(answer, related=related_chunks(result.hits))
+
+    def _scope(self, cid: str, doc_id: str | None) -> CollectionIndex:
+        """The collection's index, or the index of one document of it. Raises ``KeyError`` for a
+        document the collection does not hold."""
+        index = self.index(cid)
+        return index if doc_id is None else index.for_document(doc_id)
 
     def _ask_extractive(
         self, index: CollectionIndex, cfg: PipelineConfig, question: str, result: RetrievalResult
@@ -305,12 +382,13 @@ class Services:
         cited = [(number, passages[number - 1].chunk) for number in parsed.citations]
         return Answer(parsed.text, cited, result.trace)
 
-    def ask_paper(self, cid: str, question: str) -> Answer:
+    def ask_paper(self, cid: str, question: str, doc_id: str | None = None) -> Answer:
         """Answer with the published method: its best passage is cited as [1].
 
-        The published method exposes ranked chunk ids without scores, so the trace is empty.
+        The published method exposes ranked chunk ids without scores, so the trace is empty and
+        ``related`` is empty too.
         """
-        index = self.index(cid)
+        index = self._scope(cid, doc_id)
         paper = index.paper()
         ranked = paper.ranked_chunk_ids(question)
         text = paper.answer(question).strip()
@@ -380,6 +458,7 @@ def build_services(settings: Settings, *, jobs: JobRunner | None = None) -> Serv
         ready=threading.Event(),
         count_tokens=count_tokens,
         forget_dense=dense_stores.forget,
+        originals=OriginalFiles(settings.state_dir / "files"),
         load_scorer=load_scorer,
         load_reader=load_reader,
         warm_parser=warm_parser,

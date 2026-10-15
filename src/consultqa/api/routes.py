@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, BinaryIO, TypeVar
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from consultqa.api.schemas import (
     AskRequest,
@@ -23,6 +23,7 @@ from consultqa.api.schemas import (
     Citation,
     CreateCollection,
     PresetInfo,
+    RelatedPage,
     SearchRequest,
     SearchResponse,
     TraceItem,
@@ -46,6 +47,12 @@ logger = logging.getLogger(__name__)
 
 _READ_BYTES = 1024 * 1024
 LLM_NOT_CONFIGURED = "llm_not_configured"
+# A stored original is only ever shown as a plain download in the page's own frame, never run.
+FILE_HEADERS = {
+    "Content-Disposition": "inline",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+}
 ResultT = TypeVar("ResultT")
 
 
@@ -74,6 +81,11 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     def require_collection(cid: str) -> None:
         if services.store.get_collection(cid) is None:
             raise HTTPException(status_code=404, detail="collection_not_found")
+
+    def require_document(cid: str, doc_id: str) -> None:
+        """Refuse a document that is not in this folder: an unknown id or another folder's."""
+        if services.store.get_document(cid, doc_id) is None:
+            raise HTTPException(status_code=404, detail="document_not_found")
 
     def llm_missing(cfg: PipelineConfig) -> bool:
         """True for a preset that needs an LLM when none is configured."""
@@ -210,23 +222,67 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
         return Response(status_code=204)
 
     @router.get("/collections/{cid}/documents")
-    def list_documents(cid: str) -> list[dict[str, str]]:
+    def list_documents(cid: str) -> list[dict]:
         require_collection(cid)
         return [
-            {"id": doc["id"], "filename": doc["filename"], "created_at": doc["created_at"]}
+            {
+                "id": doc["id"],
+                "filename": doc["filename"],
+                "created_at": doc["created_at"],
+                "kind": "pdf" if doc["filename"].lower().endswith(".pdf") else "text",
+                "page_count": doc["page_count"],
+                "has_original": doc["has_original"],
+            }
             for doc in services.store.list_documents(cid)
         ]
 
+    @router.get("/collections/{cid}/documents/{doc_id}/file")
+    def document_file(cid: str, doc_id: str) -> FileResponse:
+        """The original file of a document, sent inline with headers that keep it from running.
+
+        Needs no model. The id is looked up as stored, so a malformed or foreign id is simply
+        not found and no path is ever built from it.
+        """
+        require_collection(cid)
+        document = services.store.get_document(cid, doc_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="document_not_found")
+        path = services.originals.path(doc_id) if document["has_original"] else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        return FileResponse(
+            path,
+            media_type=services.originals.media_type(path),
+            headers=FILE_HEADERS,
+        )
+
     @router.delete("/collections/{cid}/documents/{doc_id}", status_code=204)
     def remove_document(cid: str, doc_id: str) -> Response:
-        """Delete a document with its vectors and chunks."""
+        """Delete a document with its vectors, its chunks and its original file."""
         require_ready()
         # Under the lock a deletion of the folder holds, so the vector store is not built again.
         with services.collections_lock:
             require_collection(cid)
-            deleted = delete_document(
-                store=services.store, dense=services.dense(cid), collection_id=cid, doc_id=doc_id
-            )
+            # Checked first: only a document that existed may be reported as deleted when its
+            # original cannot be removed; for an unknown id any failure keeps its own status.
+            existed = services.store.get_document(cid, doc_id) is not None
+            try:
+                deleted = delete_document(
+                    store=services.store,
+                    dense=services.dense(cid),
+                    collection_id=cid,
+                    doc_id=doc_id,
+                    originals=services.originals,
+                )
+            except OSError:
+                # Only a failure of the original's removal after the rows are gone is tolerated;
+                # any other failure (such as an unreachable vector store) propagates.
+                if not existed or services.store.get_document(cid, doc_id) is not None:
+                    raise
+                logger.warning(
+                    "could not remove the original of document %s", doc_id, exc_info=True
+                )
+                deleted = True
             services.invalidate(cid)
         if not deleted:
             raise HTTPException(status_code=404, detail="document_not_found")
@@ -236,14 +292,23 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     def ask(cid: str, body: AskRequest) -> AskResponse | JSONResponse:
         """Answer a question. An LLM that fails returns 503 with the retrieval trace attached."""
         require_collection(cid)
+        if body.doc_id is not None:
+            require_document(cid, body.doc_id)
         cfg = resolve_preset(body.preset)
 
         def call() -> AskResponse:
             started = time.perf_counter()
-            if cfg is None:
-                answer = services.ask_paper(cid, body.question)
-            else:
-                answer = services.ask(cid, cfg, body.question, body.k)
+            try:
+                if cfg is None:
+                    answer = services.ask_paper(cid, body.question, doc_id=body.doc_id)
+                else:
+                    answer = services.ask(cid, cfg, body.question, body.k, doc_id=body.doc_id)
+            except KeyError:
+                if body.doc_id is None:
+                    raise
+                # Only a scoped call can miss its document: it was deleted after the route checked.
+                logger.warning("document %s was deleted during a question", body.doc_id)
+                raise HTTPException(status_code=404, detail="document_not_found") from None
             return _ask_response(answer, body.preset, started)
 
         try:
@@ -258,11 +323,19 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
     def search(cid: str, body: SearchRequest) -> SearchResponse:
         """Return the best passages of the default pipeline, without answering."""
         require_collection(cid)
+        if body.doc_id is not None:
+            require_document(cid, body.doc_id)
         cfg = PRESETS[DEFAULT_PRESET]
 
         def call() -> SearchResponse:
             started = time.perf_counter()
-            entries = services.search(cid, cfg, body.query, body.k)
+            try:
+                entries = services.search(cid, cfg, body.query, body.k, doc_id=body.doc_id)
+            except KeyError:
+                if body.doc_id is None:
+                    raise
+                logger.warning("document %s was deleted during a search", body.doc_id)
+                raise HTTPException(status_code=404, detail="document_not_found") from None
             return SearchResponse(
                 hits=[_trace_item(entry) for entry in entries],
                 preset=cfg.name,
@@ -314,6 +387,7 @@ def _ingest_job(
             filename=filename,
             max_tokens=services.settings.chunk_max_tokens,
             count_tokens=services.count_tokens,
+            originals=services.originals,
         )
     except Exception:
         logger.exception("ingestion job %s could not start", job_id)
@@ -339,6 +413,7 @@ def _ask_response(answer: Answer, preset: str, started: float) -> AskResponse:
     return AskResponse(
         answer=answer.text,
         citations=[_citation(number, chunk) for number, chunk in answer.cited],
+        related=[_related(chunk) for chunk in answer.related],
         trace=[_trace_item(entry) for entry in answer.trace],
         preset=preset,
         latency_ms=(time.perf_counter() - started) * 1000,
@@ -352,6 +427,16 @@ def _citation(number: int, chunk: Chunk) -> Citation:
         doc_id=chunk.doc_id,
         heading_path=list(chunk.heading_path),
         text=chunk.text,
+        page=chunk.page,
+    )
+
+
+def _related(chunk: Chunk) -> RelatedPage:
+    return RelatedPage(
+        chunk_id=chunk.chunk_id,
+        doc_id=chunk.doc_id,
+        page=chunk.page,
+        heading_path=list(chunk.heading_path),
     )
 
 

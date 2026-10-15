@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS documents (
     content_sha256 TEXT NOT NULL,
     filename TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    page_count INTEGER,
+    has_original INTEGER NOT NULL DEFAULT 0,
     UNIQUE(collection_id, content_sha256)
 );
 CREATE TABLE IF NOT EXISTS chunks (
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     collection_id TEXT NOT NULL,
     position INTEGER NOT NULL,
     heading_json TEXT NOT NULL,
-    text TEXT NOT NULL
+    text TEXT NOT NULL,
+    page INTEGER
 );
 CREATE TABLE IF NOT EXISTS graphs (
     collection_id TEXT PRIMARY KEY REFERENCES collections(id),
@@ -56,6 +59,15 @@ CREATE INDEX IF NOT EXISTS ix_jobs_collection ON jobs (collection_id);
 """
 
 
+# Columns added after the first release. Databases created before them get each one with
+# ALTER TABLE; new databases already have them from _SCHEMA.
+_ADDED_COLUMNS = (
+    ("chunks", "page", "INTEGER"),
+    ("documents", "page_count", "INTEGER"),
+    ("documents", "has_original", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
 class CollectionExists(Exception):
     """A collection with this name already exists."""
 
@@ -71,6 +83,7 @@ class SqliteStore:
         self._path = path
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            _ensure_columns(conn)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -147,19 +160,29 @@ class SqliteStore:
         return row["id"] if row else None
 
     def add_document(
-        self, cid: str, doc_id: str, sha: str, filename: str, chunks: Sequence[Chunk]
+        self,
+        cid: str,
+        doc_id: str,
+        sha: str,
+        filename: str,
+        chunks: Sequence[Chunk],
+        *,
+        page_count: int | None = None,
+        has_original: bool = False,
     ) -> None:
         """Insert a document and its chunks in one transaction."""
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO documents (id, collection_id, content_sha256, filename, created_at)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (doc_id, cid, sha, filename, _now()),
+                "INSERT INTO documents"
+                " (id, collection_id, content_sha256, filename, created_at, page_count,"
+                " has_original)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, cid, sha, filename, _now(), page_count, int(has_original)),
             )
             conn.executemany(
                 "INSERT INTO chunks"
-                " (chunk_id, document_id, collection_id, position, heading_json, text)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
+                " (chunk_id, document_id, collection_id, position, heading_json, text, page)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         c.chunk_id,
@@ -168,6 +191,7 @@ class SqliteStore:
                         c.position,
                         json.dumps(list(c.heading_path), ensure_ascii=False),
                         c.text,
+                        c.page,
                     )
                     for c in chunks
                 ],
@@ -176,11 +200,21 @@ class SqliteStore:
     def list_documents(self, cid: str) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, collection_id, content_sha256, filename, created_at"
-                " FROM documents WHERE collection_id = ? ORDER BY created_at, id",
+                "SELECT id, collection_id, content_sha256, filename, created_at, page_count,"
+                " has_original FROM documents WHERE collection_id = ? ORDER BY created_at, id",
                 (cid,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [_document_from_row(row) for row in rows]
+
+    def get_document(self, cid: str, doc_id: str) -> dict | None:
+        """One document of the collection, or None if it is not in this collection."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, collection_id, content_sha256, filename, created_at, page_count,"
+                " has_original FROM documents WHERE id = ? AND collection_id = ?",
+                (doc_id, cid),
+            ).fetchone()
+        return _document_from_row(row) if row else None
 
     def delete_document(self, cid: str, doc_id: str) -> bool:
         """Delete a document; its chunks go with it (ON DELETE CASCADE)."""
@@ -195,7 +229,7 @@ class SqliteStore:
         """All chunks of a collection, by document creation order, then position."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT c.chunk_id, c.document_id, c.position, c.heading_json, c.text"
+                "SELECT c.chunk_id, c.document_id, c.position, c.heading_json, c.text, c.page"
                 " FROM chunks c JOIN documents d ON d.id = c.document_id"
                 " WHERE c.collection_id = ?"
                 " ORDER BY d.created_at, d.id, c.position",
@@ -274,6 +308,20 @@ class SqliteStore:
         return dict(row) if row else None
 
 
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    """Add each column of ``_ADDED_COLUMNS`` that the database does not have yet."""
+    for table, column, declaration in _ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+
+
+def _document_from_row(row: sqlite3.Row) -> dict:
+    document = dict(row)
+    document["has_original"] = bool(document["has_original"])
+    return document
+
+
 def _chunk_from_row(row: sqlite3.Row) -> Chunk:
     return Chunk(
         chunk_id=row["chunk_id"],
@@ -281,4 +329,5 @@ def _chunk_from_row(row: sqlite3.Row) -> Chunk:
         position=row["position"],
         heading_path=tuple(json.loads(row["heading_json"])),
         text=row["text"],
+        page=row["page"],
     )

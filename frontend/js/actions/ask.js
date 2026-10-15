@@ -1,11 +1,35 @@
-// Use cases of step 3: choose a method and ask a question; the answer is kept as a result.
+// Use cases of the chat pane: choose a method, choose the scope and ask a question. Each question
+// is kept as a turn of the thread, first pending, then with its result.
 import { ApiError } from "../errors.js";
 import { t } from "../i18n.js";
-import { askBlockReason } from "../selectors.js";
+import { askBlockReason, effectiveScopeDocId } from "../selectors.js";
+import { VIEWER_CLOSED } from "../state.js";
 
-export function createAskActions({ api, store }) {
+const SCOPES = Object.freeze(["document", "folder"]);
+
+let nextTurnId = 1;
+
+export function createAskActions({ api, store, documents = { loadDocuments: async () => {} } }) {
   function selectPreset(name) {
     store.set({ selectedPreset: name });
+  }
+
+  function setScope(scope) {
+    if (!SCOPES.includes(scope)) return;
+    store.set({ scope });
+  }
+
+  // The text fills the question box of the chat pane, which is shown for it: below 1000 px the
+  // chat is one tab among three, and the box is hidden until its pane is chosen.
+  function setDraft(text) {
+    store.set({ draft: { text, token: Date.now() }, activePane: "chat" });
+  }
+
+  // A document deleted elsewhere: when it is the open one, the viewer is closed, so that later
+  // questions do not ask about it again, and the list is loaded again without it.
+  async function forgetDocument(docId) {
+    if (store.get().openDocId === docId) store.set(VIEWER_CLOSED);
+    await documents.loadDocuments();
   }
 
   function answerResult(state, body) {
@@ -18,7 +42,15 @@ export function createAskActions({ api, store }) {
       usesLlm: state.capabilities.presets.find((p) => p.name === preset)?.uses_llm ?? false,
       answer: body.answer,
       citations: body.citations,
+      related: body.related ?? [],
     };
+  }
+
+  // Replaces one turn of the thread by its id; the other turns are kept as they are.
+  function updateTurn(id, patch) {
+    store.set({
+      thread: store.get().thread.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)),
+    });
   }
 
   async function askQuestion(question) {
@@ -29,15 +61,26 @@ export function createAskActions({ api, store }) {
       store.set({ askMessage: t("ask.questionRequired") });
       return;
     }
+    const docId = effectiveScopeDocId(state);
+    const id = nextTurnId;
+    nextTurnId += 1;
     // Set before the first await, so a second click returns at once (no double request).
-    // The previous result stays on screen while the question is searched (the page keeps its height).
-    store.set({ asking: true, askMessage: "" });
+    // The earlier turns stay on screen while the question is searched.
+    store.set({
+      asking: true,
+      askMessage: "",
+      thread: [...state.thread, { id, question: text, docId, pending: true, result: null }],
+    });
     try {
-      const body = await api.ask(state.selectedCollectionId, text, state.selectedPreset);
-      store.set({ result: answerResult(state, body) });
+      const body = await api.ask(state.selectedCollectionId, text, state.selectedPreset, docId);
+      updateTurn(id, { pending: false, result: answerResult(state, body) });
     } catch (error) {
-      if (!(error instanceof ApiError)) throw error;
-      store.set({ result: { kind: "error", code: error.code } });
+      if (!(error instanceof ApiError)) {
+        updateTurn(id, { pending: false, result: { kind: "error", code: "internal_error" } });
+        throw error;
+      }
+      updateTurn(id, { pending: false, result: { kind: "error", code: error.code } });
+      if (error.code === "document_not_found") await forgetDocument(docId);
     } finally {
       store.set({ asking: false });
     }
@@ -47,5 +90,5 @@ export function createAskActions({ api, store }) {
     store.set({ askMessage: "" });
   }
 
-  return { selectPreset, askQuestion, clearMessage };
+  return { selectPreset, askQuestion, clearMessage, setScope, setDraft };
 }

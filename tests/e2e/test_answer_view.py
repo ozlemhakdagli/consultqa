@@ -2,7 +2,15 @@
 
 import pytest
 from playwright.sync_api import expect
-from ui_helpers import caps_without_llm, choose_method, collection_with_document, open_page
+from ui_helpers import (
+    caps_without_llm,
+    choose_method,
+    collection_with_document,
+    newest_title,
+    open_page,
+    source_card,
+    source_passage,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -45,16 +53,16 @@ def test_the_source_is_shown_in_full_with_the_answer_sentence_marked(page, base_
     collection_with_document(page, base_url)
     _mock_answer(page, ANSWER)
     _ask(page)
-    expect(page.locator("#result-title")).to_have_text(ANSWER)
+    expect(newest_title(page)).to_have_text(ANSWER)
     expect(page.locator(".answer-card .note")).to_have_text(NOTE_EXTRACTIVE)
-    expect(page.locator("#cite-1")).to_contain_text("Bölüm: Stok")
-    expect(page.locator("#cite-1")).to_contain_text("Belgedeki metin")
-    expect(page.locator("#cite-1-text")).to_be_visible()
-    expect(page.locator("#cite-1-text")).to_have_text(PASSAGE)
-    expect(page.locator("#cite-1-text mark.source-sentence")).to_have_text(
+    expect(source_card(page)).to_contain_text("Bölüm: Stok")
+    expect(source_card(page)).to_contain_text("Belgedeki metin")
+    expect(source_passage(page)).to_be_visible()
+    expect(source_passage(page)).to_have_text(PASSAGE)
+    expect(source_passage(page).locator("mark.source-sentence")).to_have_text(
         "Stok modülü performans iyileştirmesi yapıldı."
     )
-    expect(page.locator("#cite-1-text mark strong.source-answer")).to_have_text(ANSWER)
+    expect(source_passage(page).locator("mark strong.source-answer")).to_have_text(ANSWER)
     expect(page.get_by_role("button", name="Kaynağın metnini göster")).to_have_count(0)
 
 
@@ -63,9 +71,9 @@ def test_an_answer_that_is_not_inside_the_passage_marks_nothing_and_claims_nothi
     collection_with_document(page, base_url)
     _mock_answer(page, "başka bir ifade")
     _ask(page)
-    expect(page.locator("#cite-1-text")).to_be_visible()
-    expect(page.locator("#cite-1-text")).to_have_text(PASSAGE)
-    expect(page.locator("#cite-1-text mark")).to_have_count(0)
+    expect(source_passage(page)).to_be_visible()
+    expect(source_passage(page)).to_have_text(PASSAGE)
+    expect(source_passage(page).locator("mark")).to_have_count(0)
     expect(page.locator(".answer-card .note")).to_have_text(NOTE_NO_MARK)
 
 
@@ -75,11 +83,11 @@ def test_the_ai_answer_shows_its_sources_open_and_marks_nothing(page, base_url):
     choose_method(page, "Yapay zekâ ile yazılmış cevap")
     _ask(page)
     expect(page.locator(".answer-card .note")).to_contain_text("Bu cevabı yapay zekâ yazdı.")
-    expect(page.locator("#cite-1-text")).to_be_visible()
+    expect(source_passage(page)).to_be_visible()
     expect(page.locator(".source-passage mark")).to_have_count(0)
     page.get_by_role("button", name="1. kaynağa git").click()
-    expect(page.locator("#cite-1")).to_be_focused()
-    expect(page.locator("#cite-1")).to_have_attribute("data-active", "true")
+    expect(source_card(page)).to_be_focused()
+    expect(source_card(page)).to_have_attribute("data-active", "true")
 
 
 @pytest.mark.usefixtures("fast_job_polling")
@@ -88,7 +96,7 @@ def test_the_passage_text_is_never_parsed_as_html(page, base_url):
     text = "Önce bir cümle. Bu <script>window.__pwned = 1</script> içerir. Sonra bir cümle."
     _mock_answer(page, "<script>window.__pwned = 1</script>", text=text)
     _ask(page)
-    expect(page.locator("#cite-1-text mark strong")).to_have_text(
+    expect(source_passage(page).locator("mark strong")).to_have_text(
         "<script>window.__pwned = 1</script>"
     )
     assert page.evaluate("window.__pwned") is None

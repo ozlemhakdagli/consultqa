@@ -28,15 +28,15 @@ def test_an_english_document_is_uploaded_asked_and_cited_in_english(make_page, f
     open_page(page, fresh_server)
     upload_and_wait(page, "policy.md", ENGLISH, "en")
     _ask(page)
-    expect(page.locator("#result-title")).to_have_text("The warranty covers parts for two years.")
+    expect(page.locator(".result-title")).to_have_text("The warranty covers parts for two years.")
     expect(page.locator(".answer-card .note")).to_have_text(NOTE)
-    expect(page.locator("#cite-1")).to_contain_text("Document: policy.md")
-    expect(page.locator("#cite-1")).to_contain_text("Section: Warranty")
-    expect(page.locator("#cite-1")).to_contain_text("Text in the document")
-    expect(page.locator("#cite-1-text mark.source-sentence")).to_have_text(
+    expect(page.locator(".citation-card").first).to_contain_text("Document: policy.md")
+    expect(page.locator(".citation-card").first).to_contain_text("Section: Warranty")
+    expect(page.locator(".citation-card").first).to_contain_text("Text in the document")
+    expect(page.locator(".citation-card").first.locator("mark.source-sentence")).to_have_text(
         "The warranty covers parts for two years."
     )
-    expect(page.locator("#cite-1-text mark strong.source-answer")).to_have_text(
+    expect(page.locator(".citation-card").first.locator("mark strong.source-answer")).to_have_text(
         "The warranty covers parts for two years."
     )
 
