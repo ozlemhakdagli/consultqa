@@ -9,6 +9,7 @@ __pycache__/
 
 *.pdf
 *.png
+!assets/images/*.png
 *.jpg
 *.jpeg
 *.webp

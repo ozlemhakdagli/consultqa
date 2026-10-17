@@ -5,10 +5,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from screenshot_names import SCREENSHOT_FILES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PRIVATE_PREFIXES = ("private/", "data/raw/", "docs/", "state/")
 PRIVATE_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".webp")
+SCREENSHOT_PATHS = {f"assets/images/{name}" for name in SCREENSHOT_FILES}
 
 
 def _is_env_file(path: str) -> bool:
@@ -29,8 +31,32 @@ def test_gitignore_covers_generated_and_secret_files() -> None:
     assert missing == [], f".gitignore is missing: {missing}"
 
 
+def test_gitignore_lets_the_screenshots_through() -> None:
+    """Each README screenshot is not ignored by git, so it can be committed."""
+    if not (REPO_ROOT / ".git").exists():
+        pytest.skip("not a git repository; cannot check ignore rules")
+    if shutil.which("git") is None:
+        pytest.skip("git is not available")
+
+    ignored = []
+    for name in SCREENSHOT_FILES:
+        # git check-ignore exits 0 when the path is ignored and 1 when it is not.
+        result = subprocess.run(  # noqa: S603
+            ["git", "check-ignore", "-q", f"assets/images/{name}"],  # noqa: S607
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        if result.returncode != 1:
+            ignored.append(name)
+    assert ignored == [], f".gitignore hides README screenshots: {ignored}"
+
+
 def test_no_private_path_is_tracked() -> None:
-    """No private directory, raw data file, PDF, screenshot, state file or env file is tracked."""
+    """No private directory, raw data file, PDF, state file or env file is tracked.
+
+    The four README screenshots in assets/images/ are the only tracked images allowed.
+    They are made from sample data by scripts/capture_screenshots.py.
+    """
     if not (REPO_ROOT / ".git").exists():
         pytest.skip("not a git repository; cannot check tracked files")
     if shutil.which("git") is None:
@@ -47,9 +73,12 @@ def test_no_private_path_is_tracked() -> None:
     offending = [
         path
         for path in tracked
-        if path.startswith(PRIVATE_PREFIXES)
-        or path.endswith(PRIVATE_SUFFIXES)
-        or _is_env_file(path)
+        if (
+            path.startswith(PRIVATE_PREFIXES)
+            or path.endswith(PRIVATE_SUFFIXES)
+            or _is_env_file(path)
+        )
+        and path not in SCREENSHOT_PATHS
     ]
     assert offending == [], f"private paths are tracked: {offending}"
 
