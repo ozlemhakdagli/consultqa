@@ -19,10 +19,10 @@ export function createAskActions({ api, store, documents = { loadDocuments: asyn
     store.set({ scope });
   }
 
-  // The text fills the question box of the chat pane, which is shown for it: below 1000 px the
-  // chat is one tab among three, and the box is hidden until its pane is chosen.
+  // The text fills the question box of the chat pane. Only the draft is set here: the form decides
+  // whether the chat pane must be shown, which is needed only where the panes are tabs.
   function setDraft(text) {
-    store.set({ draft: { text, token: Date.now() }, activePane: "chat" });
+    store.set({ draft: { text, token: Date.now() } });
   }
 
   // A document deleted elsewhere: when it is the open one, the viewer is closed, so that later

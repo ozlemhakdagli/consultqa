@@ -217,6 +217,87 @@ def test_the_selected_text_of_the_viewer_fills_the_question_without_submitting(
 
 
 @pytest.mark.usefixtures("fast_job_polling")
+def test_at_wide_width_the_selected_text_fills_the_question_and_the_viewer_stays(
+    page, viewer_url, tmp_path
+):
+    page.set_viewport_size({"width": WIDE, "height": 900})
+    _open_ocak_and_select_its_first_sentence(page, viewer_url, tmp_path)
+    bodies = _ask_requests(page)
+
+    expect(page.locator("#selection-ask")).to_be_visible()
+    page.locator("#selection-ask").click()
+
+    # The viewer tab stays the chosen one and its pane is still shown; the box holds the text, focused.
+    expect(page.locator("#tab-viewer")).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#pane-viewer")).to_have_attribute("data-pane-active", "true")
+    expect(page.locator("#question")).to_have_value(OCAK_PAGES[0])
+    expect(page.locator("#question")).to_be_focused()
+    expect(_turns(page)).to_have_count(0, timeout=1_000)
+    assert bodies == []
+
+
+@pytest.mark.usefixtures("fast_job_polling")
+def test_at_wide_width_a_draft_does_not_relayout_the_viewer(page, viewer_url, tmp_path):
+    page.set_viewport_size({"width": WIDE, "height": 900})
+    _open_ocak_and_select_its_first_sentence(page, viewer_url, tmp_path)
+    # Each canvas is marked before the draft. The viewer relays out when its pane is shown again
+    # by a page opening; a relayout replaces the canvases, so a lost mark shows it.
+    page.evaluate(
+        """() => document.querySelectorAll('#viewer-canvas canvas')
+          .forEach((canvas) => { canvas.dataset.keep = '1'; })"""
+    )
+    marks = """() => [...document.querySelectorAll('#viewer-canvas canvas')]
+          .map((canvas) => [canvas.width, canvas.height, canvas.dataset.keep === '1'])"""
+    canvases_before = page.evaluate(marks)
+    assert canvases_before != []
+
+    page.locator("#selection-ask").click()
+    expect(page.locator("#question")).to_be_focused()
+
+    # The document is opened again, and the page is waited on until it is drawn; then the canvases
+    # are compared with the marked ones.
+    _open_document(page, OCAK)
+    expect(
+        page.locator("#viewer-canvas .textLayer span").filter(has_text="Sipariş")
+    ).not_to_have_count(0)
+    expect(page.locator("#viewer-page")).to_have_value("1")
+    assert page.evaluate(marks) == canvases_before
+
+
+@pytest.mark.usefixtures("fast_job_polling")
+@pytest.mark.parametrize(("width", "chosen"), [(999, "chat"), (1000, "viewer")])
+def test_the_selection_chooses_the_chat_tab_only_below_1000px(
+    page, viewer_url, tmp_path, width, chosen
+):
+    page.set_viewport_size({"width": width, "height": 900})
+    _open_ocak_and_select_its_first_sentence(page, viewer_url, tmp_path)
+
+    expect(page.locator("#selection-ask")).to_be_visible()
+    page.locator("#selection-ask").click()
+
+    expect(page.locator(f"#tab-{chosen}")).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#question")).to_have_value(OCAK_PAGES[0])
+    expect(page.locator("#question")).to_be_focused()
+
+
+@pytest.mark.usefixtures("fast_job_polling")
+@pytest.mark.parametrize(("start", "end", "chosen"), [(1280, 800, "chat"), (800, 1280, "viewer")])
+def test_the_width_at_the_click_decides_the_pane_after_a_resize(
+    page, viewer_url, tmp_path, start, end, chosen
+):
+    page.set_viewport_size({"width": start, "height": 900})
+    _open_ocak_and_select_its_first_sentence(page, viewer_url, tmp_path)
+    expect(page.locator("#selection-ask")).to_be_visible()
+
+    page.set_viewport_size({"width": end, "height": 900})
+    expect(page.locator("#selection-ask")).to_be_visible()
+    page.locator("#selection-ask").click()
+
+    expect(page.locator(f"#tab-{chosen}")).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#question")).to_be_focused()
+
+
+@pytest.mark.usefixtures("fast_job_polling")
 def test_a_text_file_opens_as_text_in_the_viewer(page, viewer_url):
     new_library(page, viewer_url)
     open_page(page, viewer_url)

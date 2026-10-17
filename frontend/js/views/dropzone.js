@@ -1,4 +1,4 @@
-// Step 1 drop area: the file button, drag and drop, the file types and why it may be locked.
+// Documents pane drop area: the file button, drag and drop, the file types and why it may be locked.
 import { byId, setVisible } from "../dom.js";
 import { formatFileTypes, formatMegabytes } from "../format.js";
 import { t } from "../i18n.js";

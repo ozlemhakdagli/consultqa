@@ -58,6 +58,11 @@ export function createApi({ fetchImpl = (...args) => fetch(...args) } = {}) {
     return response.text();
   }
 
+  // The passages of a document grouped by page. Parsed as JSON; a failure body carries the code.
+  async function documentPassages(cid, docId) {
+    return call(`${collection(cid)}/documents/${encodeURIComponent(docId)}/text`);
+  }
+
   return {
     capabilities: () => call("/api/capabilities"),
     listCollections: () => call("/api/collections"),
@@ -75,5 +80,6 @@ export function createApi({ fetchImpl = (...args) => fetch(...args) } = {}) {
     uploadDocument,
     documentFileUrl,
     documentText,
+    documentPassages,
   };
 }

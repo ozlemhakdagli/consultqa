@@ -789,6 +789,26 @@ def test_highlight_after_opening_another_document_finds_the_new_text(page, base_
     assert result == [True, ["Only page here."]]
 
 
+def test_reopening_another_document_sizes_and_draws_its_pages(page, base_url, tmp_path):
+    first = _pdf_base64(tmp_path / "sample.pdf")
+    second = _pdf_base64(tmp_path / "one.pdf", ONE_PAGE)
+    result = _run(
+        page,
+        base_url,
+        """
+        await viewer.open(toUrl('__B64__'));
+        await waitFor(() => canvasOf(1) !== null);
+        await viewer.open(toUrl('__B64_2__'));
+        const drawn = await waitFor(() => canvasOf(1) !== null);
+        const node = document.querySelector('.pdf-page[data-page="1"]');
+        return [drawn, node.style.width !== ''];
+        """,
+        first,
+        second,
+    )
+    assert result == [True, True]
+
+
 def test_text_layer_is_scaled_by_the_page_scale(page, base_url, tmp_path):
     pdf = _pdf_base64(tmp_path / "sample.pdf")
     result = _run(
@@ -1459,3 +1479,365 @@ def test_a_failing_re_mark_after_a_zoom_is_handled_and_a_later_highlight_retries
         pdf,
     )
     assert result == ["failed", [], True, ["Gamma three is here."]]
+
+
+# Counts the layouts of the viewer: a layout clears the node of each page, so the node of page 1
+# is cleared once per layout. The counter is removed again by stopCounting.
+COUNT_LAYOUTS = r"""
+const layoutCount = { n: 0 };
+const nativeReplace = Element.prototype.replaceChildren;
+Element.prototype.replaceChildren = function (...args) {
+  if (this.classList.contains('pdf-page') && this.dataset.page === '1') layoutCount.n += 1;
+  return nativeReplace.apply(this, args);
+};
+const stopCounting = () => { Element.prototype.replaceChildren = nativeReplace; };
+const A4 = 595.2756;
+"""
+
+
+def test_widening_the_view_in_fit_zoom_relays_out_the_pages(page, base_url, tmp_path):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _run(
+        page,
+        base_url,
+        """
+        host.style.width = '600px';
+        await viewer.open(toUrl('__B64__'));
+        viewer.goToPage(2);
+        const before = viewer.scale();
+        host.style.width = '900px';
+        await waitFor(() => viewer.scale() > before * 1.2);
+        const expected = (host.clientWidth - 64) / 595.2756;
+        const pageNode = document.querySelector('.pdf-page[data-page="1"]');
+        return {
+          grew: viewer.scale() > before,
+          proportion: Math.abs(viewer.scale() - expected) < 0.01,
+          pageWidth: Math.abs(pageNode.getBoundingClientRect().width - viewer.scale() * 595.2756) < 1,
+          current: viewer.currentPage(),
+        };
+        """,
+        pdf,
+    )
+    assert result == {"grew": True, "proportion": True, "pageWidth": True, "current": 2}
+
+
+def test_a_highlight_is_marked_again_after_a_resize_without_moving_the_reader(
+    page, base_url, tmp_path
+):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _run(
+        page,
+        base_url,
+        """
+        host.style.width = '600px';
+        await viewer.open(toUrl('__B64__'));
+        await viewer.highlight('gamma three');
+        await waitFor(() => marked().length > 0);
+        host.style.width = '900px';
+        await waitFor(() => viewer.scale() > 1.2);
+        await waitFor(() => marked().length > 0);
+        const span = document.querySelector('.pdf-highlight');
+        const view = host.getBoundingClientRect();
+        const pageNode = span.closest('.pdf-page');
+        return {
+          text: marked(),
+          page: pageNode.dataset.page,
+          current: viewer.currentPage(),
+          // The page sits at the reading line of the view, as goToPage leaves it: a scroll to
+          // the mark would have moved the page.
+          pageAtReadingLine: Math.abs(
+            pageNode.getBoundingClientRect().top - (view.top + view.height * 0.3)
+          ) < 2,
+        };
+        """,
+        pdf,
+    )
+    assert result == {
+        "text": ["Gamma three is here."],
+        "page": "2",
+        "current": 2,
+        "pageAtReadingLine": True,
+    }
+
+
+# The height feedback only: the view grows with its pages, so every layout changes the container's
+# height, and the width stays the same in this host. A scrollbar that a layout makes appear is
+# covered by the classic-scrollbar tests below, since the headless browser hides scrollbars here.
+def test_height_feedback_from_a_layout_does_not_start_more_layouts(page, base_url, tmp_path):
+    pdf = _pdf_base64(tmp_path / "long.pdf", PAGES_12)
+    result = _run(
+        page,
+        base_url,
+        COUNT_LAYOUTS
+        + """
+        // The view grows with its pages, so every layout changes the container's height.
+        host.style.height = 'auto';
+        await viewer.open(toUrl('__B64__'));
+        await settle(100);
+        layoutCount.n = 0;
+        host.style.width = '500px';
+        await waitFor(() => Math.abs(viewer.scale() - (500 - 64) / A4) < 0.01);
+        await settle(150);
+        host.style.width = '700px';
+        await waitFor(() => Math.abs(viewer.scale() - (700 - 64) / A4) < 0.01);
+        await settle(150);
+        stopCounting();
+        return layoutCount.n;
+        """,
+        pdf,
+    )
+    assert result == 2
+
+
+@pytest.fixture
+def classic_browser(playwright_driver):
+    """A browser whose scrollbars take layout width, as in the user's Chrome. The shared browser
+    hides them, which hid a loop and a double layout on open; this one does not. Skips when no
+    browser can be launched that way."""
+    from playwright.sync_api import Error as PlaywrightError
+
+    launched = None
+    last_error = None
+    for options in ({}, {"channel": "chrome"}):
+        try:
+            launched = playwright_driver.chromium.launch(
+                ignore_default_args=["--hide-scrollbars"], **options
+            )
+            break
+        except PlaywrightError as error:
+            last_error = error
+    if launched is None:
+        pytest.skip(f"no browser with classic scrollbars can be launched: {last_error}")
+    yield launched
+    launched.close()
+
+
+def _cold_run(browser, base_url, body: str, pdf_b64: str) -> object:
+    """Run the body in a new page of the browser, so that nothing from an earlier run is kept."""
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    try:
+        return _run(context.new_page(), base_url, body, pdf_b64)
+    finally:
+        context.close()
+
+
+# In the band of heights below, a one-page document in an 800 px host gets a scrollbar with a
+# layout, which narrows the host and makes the fit width change; the old code then relaid out
+# again and again. Each open must end with at most two layouts and a stable scale.
+BAND_HEIGHTS = [1035, 1040, 1050]
+
+
+def test_a_real_scrollbar_in_the_band_of_heights_settles_after_at_most_two_layouts(
+    classic_browser, base_url, tmp_path
+):
+    pdf = _pdf_base64(tmp_path / "one.pdf", ONE_PAGE)
+    result = _cold_run(
+        classic_browser,
+        base_url,
+        COUNT_LAYOUTS
+        + """
+        const outcomes = [];
+        for (const height of __HEIGHTS__) {
+          host.style.height = `${height}px`;
+          layoutCount.n = 0;
+          await viewer.open(toUrl('__B64__'));
+          await settle(300);
+          const scaleAfterOpen = viewer.scale();
+          await settle(300);
+          outcomes.push({
+            layouts: layoutCount.n,
+            stable: viewer.scale() === scaleAfterOpen,
+            scrollbar: host.offsetWidth - host.clientWidth,
+          });
+        }
+        stopCounting();
+        return outcomes;
+        """.replace("__HEIGHTS__", str(BAND_HEIGHTS)),
+        pdf,
+    )
+    assert len(result) == len(BAND_HEIGHTS)
+    for outcome in result:
+        assert outcome["scrollbar"] >= 10, outcome
+        assert outcome["layouts"] <= 2, outcome
+        assert outcome["stable"] is True, outcome
+
+
+def test_opening_a_three_page_document_with_a_real_scrollbar_lays_out_once(
+    classic_browser, base_url, tmp_path
+):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _cold_run(
+        classic_browser,
+        base_url,
+        COUNT_LAYOUTS
+        + """
+        host.style.height = '600px';
+        layoutCount.n = 0;
+        await viewer.open(toUrl('__B64__'));
+        // The observer checks in a later frame: the settle lets any second layout happen first.
+        await settle(300);
+        stopCounting();
+        return { layouts: layoutCount.n, scrollbar: host.offsetWidth - host.clientWidth };
+        """,
+        pdf,
+    )
+    assert result["scrollbar"] >= 10, result
+    assert result["layouts"] == 1
+
+
+def test_a_highlight_right_after_open_with_a_real_scrollbar_finds_its_page_every_time(
+    classic_browser, base_url, tmp_path
+):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    body = """
+        host.style.height = '600px';
+        await viewer.open(toUrl('__B64__'));
+        const found = await viewer.highlight('gamma three', { page: 2 });
+        await settle(300);
+        return [found, viewer.currentPage(), host.offsetWidth - host.clientWidth];
+        """
+    # Each open is cold, in a new page: the race between the second layout and the highlight
+    # showed in most cold runs, so three runs are made.
+    results = [_cold_run(classic_browser, base_url, body, pdf) for _ in range(3)]
+    for found, current, scrollbar in results:
+        assert scrollbar >= 10
+        assert found is True
+        assert current == 2
+
+
+def test_a_numeric_zoom_is_not_changed_by_a_resize(page, base_url, tmp_path):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _run(
+        page,
+        base_url,
+        COUNT_LAYOUTS
+        + """
+        await viewer.open(toUrl('__B64__'));
+        viewer.setZoom(1.5);
+        await settle(100);
+        layoutCount.n = 0;
+        host.style.width = '500px';
+        await settle(200);
+        stopCounting();
+        const numeric = { zoom: viewer.zoom(), scale: viewer.scale(), relayouts: layoutCount.n };
+        // Once the zoom is "fit" again the same resize does relayout: the observer is in place.
+        viewer.setZoom('fit');
+        host.style.width = '400px';
+        const fitFollows = await waitFor(
+          () => Math.abs(viewer.scale() - (400 - 64) / A4) < 0.01,
+        );
+        return { ...numeric, fitFollows };
+        """,
+        pdf,
+    )
+    assert result == {"zoom": 1.5, "scale": 1.5, "relayouts": 0, "fitFollows": True}
+
+
+def test_a_hidden_view_is_ignored_and_recovers_when_it_is_wide_again(page, base_url, tmp_path):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _run(
+        page,
+        base_url,
+        """
+        const A4 = 595.2756;
+        await viewer.open(toUrl('__B64__'));
+        const before = viewer.scale();
+        host.style.width = '0px';
+        await settle(150);
+        const keptWhileHidden = viewer.scale() === before;
+        host.style.width = '700px';
+        const recovered = await waitFor(
+          () => Math.abs(viewer.scale() - (700 - 64) / A4) < 0.01,
+        );
+        return { keptWhileHidden, recovered };
+        """,
+        pdf,
+    )
+    assert result == {"keptWhileHidden": True, "recovered": True}
+
+
+def test_the_resize_observer_is_disconnected_by_destroy(page, base_url, tmp_path):
+    pdf = _pdf_base64(tmp_path / "sample.pdf")
+    result = _run(
+        page,
+        base_url,
+        """
+        const NativeObserver = window.ResizeObserver;
+        const observers = [];
+        class SpyObserver extends NativeObserver {
+          constructor(callback) {
+            super(callback);
+            this.disconnects = 0;
+            observers.push(this);
+          }
+          disconnect() {
+            this.disconnects += 1;
+            super.disconnect();
+          }
+        }
+        window.ResizeObserver = SpyObserver;
+        try {
+          const own = document.createElement('div');
+          own.style.width = '700px';
+          own.style.height = '600px';
+          document.body.append(own);
+          const viewer2 = await createPdfViewer(own, {});
+          await viewer2.open(toUrl('__B64__'));
+          const made = observers.length;
+          viewer2.destroy();
+          own.style.width = '500px';
+          await settle(150);
+          return {
+            made,
+            allDisconnected: made > 0 && observers.every((o) => o.disconnects > 0),
+          };
+        } finally {
+          window.ResizeObserver = NativeObserver;
+        }
+        """,
+        pdf,
+    )
+    assert result == {"made": 1, "allDisconnected": True}
+
+
+# The public members of the viewer, and nothing else: the helpers in pages.js and search.js are
+# reached only through pdf.js, so a member added to the facade shows up here.
+VIEWER_MEMBERS = sorted(
+    [
+        "open",
+        "goToPage",
+        "currentPage",
+        "setZoom",
+        "zoom",
+        "scale",
+        "highlight",
+        "clearHighlight",
+        "destroy",
+    ]
+)
+
+
+def test_the_viewer_has_exactly_the_public_members(page, base_url):
+    result = _run(page, base_url, "return Object.keys(viewer).sort();", "")
+    assert result == VIEWER_MEMBERS
+
+
+def test_the_split_modules_expose_their_named_exports(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const pages = await import('/js/viewer/pages.js');
+        const search = await import('/js/viewer/search.js');
+        return {
+          createPageRenderer: typeof pages.createPageRenderer,
+          newPage: typeof pages.newPage,
+          createHighlighter: typeof search.createHighlighter,
+        };
+        """,
+    )
+    assert result == {
+        "createPageRenderer": "function",
+        "newPage": "function",
+        "createHighlighter": "function",
+    }

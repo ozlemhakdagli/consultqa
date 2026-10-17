@@ -1,5 +1,6 @@
 """Ingestion pipeline: indexing, duplicate uploads, failures, deletion and the job runner."""
 
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from consultqa.graph.build import EvidenceGraph
 from consultqa.ingest.parse import DocumentParser, TextParser
 from consultqa.ingest.pdfium import PdfiumParser
 from consultqa.ingest.pipeline import delete_document, ingest_file
+from consultqa.models import Chunk
 from consultqa.retrieve.dense import NumpyDenseBackend
 from consultqa.store.originals import OriginalFiles
 from consultqa.store.sqlite_store import SqliteStore
@@ -590,3 +592,361 @@ def test_a_failed_original_removal_still_fails_the_job_and_drops_the_vectors(tmp
     assert store.get_job(job)["state"] == "failed"
     assert store.get_job(job)["error"] == "internal_error"
     assert dense.search(np.ones(64, dtype=np.float32), 5) == []
+
+
+def _legacy(store, cid, doc_id, text, filename, *, page_count=None, sha=None, dense=None):
+    """A document uploaded before originals were kept: no original, and no pages unless given."""
+    chunk = Chunk(chunk_id=f"{doc_id}-0", doc_id=doc_id, position=0, heading_path=(), text=text)
+    digest = sha or hashlib.sha256(text.encode("utf-8")).hexdigest()
+    store.add_document(
+        cid, doc_id, digest, filename, [chunk], page_count=page_count, has_original=False
+    )
+    if dense is not None:
+        dense.upsert([chunk.chunk_id], HashEncoder(dim=64).encode_passages([text]))
+
+
+def test_a_legacy_document_with_the_same_content_is_replaced(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü performans", encoding="utf-8")
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü performans", "a.txt", dense=dense)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    [document] = store.list_documents(col)
+    assert document["id"] == new and document["has_original"] is True
+    assert [c.doc_id for c in store.list_chunks(col)] == [new]
+    hits = [chunk_id for chunk_id, _ in dense.search(np.ones(64, dtype=np.float32), k=5)]
+    assert hits and all(chunk_id.startswith(new) for chunk_id in hits)
+
+
+def test_a_legacy_pdf_with_the_same_name_is_replaced_even_when_its_hash_differs(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    originals = OriginalFiles(tmp_path / "files")
+    pdf = write_pdf(
+        tmp_path / "rapor.pdf",
+        [
+            [("h1", "Giriş"), ("p", "Stok modülü performans raporu")],
+            [],
+            [("p", "Sipariş modülü tablo filtreleme")],
+        ],
+    )
+    old, new = _doc_id("old"), _doc_id("new")
+    # Docling merged the text across page breaks before, so the old hash differs.
+    _legacy(store, col, old, "eski metin", "rapor.pdf", page_count=None)
+    job = store.create_job(col, new)
+    assert (
+        _run(
+            store,
+            NumpyDenseBackend(),
+            pdf,
+            job,
+            col,
+            new,
+            parser=PdfiumParser(max_pages=10),
+            originals=originals,
+        )
+        is True
+    )
+    [document] = store.list_documents(col)
+    assert document["id"] == new
+    assert document["page_count"] == 3 and document["has_original"] is True
+    assert originals.path(new) is not None
+
+
+def test_a_document_with_an_original_is_kept_on_an_identical_upload(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Aynı metin", encoding="utf-8")
+    first, second = _doc_id("first"), _doc_id("second")
+    _run(store, dense, doc_file, store.create_job(col, first), col, first)
+    job = store.create_job(col, second)
+    assert _run(store, dense, doc_file, job, col, second) is False
+    assert store.get_job(job)["state"] == "done"
+    assert store.get_job(job)["document_id"] == first
+    assert [d["id"] for d in store.list_documents(col)] == [first]
+
+
+def test_a_document_with_an_original_is_not_replaced_by_a_same_named_upload(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Birinci metin", encoding="utf-8")
+    first = _doc_id("first")
+    _run(store, dense, doc_file, store.create_job(col, first), col, first)
+    doc_file.write_text("İkinci metin", encoding="utf-8")
+    second = _doc_id("second")
+    assert _run(store, dense, doc_file, store.create_job(col, second), col, second) is True
+    assert sorted(d["id"] for d in store.list_documents(col)) == sorted([first, second])
+
+
+def test_a_legacy_document_of_another_folder_is_left_alone(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    mine = store.create_collection("mine")["id"]
+    other_folder = store.create_collection("other")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    elsewhere, new = _doc_id("elsewhere"), _doc_id("new")
+    _legacy(store, other_folder, elsewhere, "Stok modülü", "a.txt", dense=dense)
+    assert _run(store, dense, doc_file, store.create_job(mine, new), mine, new) is True
+    assert [d["id"] for d in store.list_documents(other_folder)] == [elsewhere]
+    assert [d["id"] for d in store.list_documents(mine)] == [new]
+
+
+class _Boom(HashEncoder):
+    def encode_passages(self, texts):
+        raise RuntimeError("boom")
+
+
+@pytest.mark.parametrize("failure", ["encoder", "store"])
+def test_a_failed_replacement_keeps_the_old_document(tmp_path, monkeypatch, failure):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "a.txt", sha="eski", dense=dense)
+    if failure == "store":
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("store failed")
+
+        monkeypatch.setattr(store, "replace_document", boom)
+    encoder = _Boom(dim=64) if failure == "encoder" else HashEncoder(dim=64)
+    job = store.create_job(col, new)
+    _run(store, dense, doc_file, job, col, new, encoder=encoder)
+    assert store.get_job(job)["state"] == "failed"
+    assert [d["id"] for d in store.list_documents(col)] == [old]
+    assert [c.chunk_id for c in store.list_chunks(col)] == [f"{old}-0"]
+    hits = [chunk_id for chunk_id, _ in dense.search(np.ones(64, dtype=np.float32), k=5)]
+    assert hits == [f"{old}-0"]
+
+
+def test_the_old_vectors_are_removed_only_after_the_new_document_is_stored(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    calls: list = []
+
+    class Recording(NumpyDenseBackend):
+        def upsert(self, ids, vectors):
+            calls.append(("upsert", list(ids)))
+            super().upsert(ids, vectors)
+
+        def delete(self, ids):
+            present = [d["id"] for d in store.list_documents(col)]
+            calls.append(("delete", list(ids), present))
+            super().delete(ids)
+
+    dense = Recording()
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "a.txt", sha="eski", dense=dense)
+    calls.clear()
+    assert _run(store, dense, doc_file, store.create_job(col, new), col, new) is True
+    assert [call[0] for call in calls] == ["upsert", "delete"]
+    assert calls[1][1] == [f"{old}-0"]
+    assert calls[1][2] == [new]
+
+
+def test_a_failed_removal_of_old_vectors_does_not_fail_the_replacement(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+
+    class Stuck(NumpyDenseBackend):
+        def delete(self, ids):
+            raise OSError("index locked")
+
+    dense = Stuck()
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "a.txt", sha="eski")
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+
+
+def test_a_legacy_document_with_the_same_content_under_another_name_is_replaced(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "eski.txt", dense=dense)
+    assert _run(store, dense, doc_file, store.create_job(col, new), col, new) is True
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+
+
+def test_an_unrelated_legacy_document_is_left_alone(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    unrelated, new = _doc_id("unrelated"), _doc_id("new")
+    _legacy(store, col, unrelated, "Sipariş modülü", "diger.txt", sha="baska", dense=dense)
+    assert _run(store, dense, doc_file, store.create_job(col, new), col, new) is True
+    assert sorted(d["id"] for d in store.list_documents(col)) == sorted([unrelated, new])
+
+
+def test_a_legacy_row_with_a_page_count_and_the_same_name_is_left_alone(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    paged, new = _doc_id("paged"), _doc_id("new")
+    _legacy(store, col, paged, "Sipariş modülü", "a.txt", page_count=2, sha="baska", dense=dense)
+    assert _run(store, dense, doc_file, store.create_job(col, new), col, new) is True
+    assert sorted(d["id"] for d in store.list_documents(col)) == sorted([paged, new])
+
+
+@pytest.mark.parametrize("older", ["same_name", "same_content"])
+def test_several_legacy_matches_end_with_one_document(tmp_path, older):
+    # The first legacy row has the upload's name and another hash; the second has the upload's
+    # content. Replacing the first with a row whose hash the second still holds would collide.
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    by_name, by_content, new = _doc_id("name"), _doc_id("content"), _doc_id("new")
+    rows = [
+        (by_name, "Sipariş modülü", "a.txt", "baska"),
+        (by_content, "Stok modülü", "diger.txt", None),
+    ]
+    if older == "same_content":
+        rows.reverse()
+    for doc, text, name, sha in rows:
+        _legacy(store, col, doc, text, name, sha=sha, dense=dense)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+
+
+def test_a_failed_mark_of_done_after_the_replace_keeps_the_new_document(tmp_path, monkeypatch):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "a.txt", sha="eski", dense=dense)
+    real_set_job = store.set_job
+
+    def fail_when_done(job_id, state, error=None):
+        if state == "done":
+            raise RuntimeError("store failed")
+        real_set_job(job_id, state, error)
+
+    monkeypatch.setattr(store, "set_job", fail_when_done)
+    job = store.create_job(col, new)
+    _run(store, dense, doc_file, job, col, new)
+    # The replace committed first, so the new document stays; only the job's own state is lost.
+    [document] = store.list_documents(col)
+    assert document["id"] == new and document["has_original"] is True
+    assert [c.doc_id for c in store.list_chunks(col)] == [new]
+    assert store.get_job(job)["state"] == "failed"
+
+
+def test_a_replacement_whose_old_document_vanished_is_added(tmp_path, monkeypatch):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    old, new = _doc_id("old"), _doc_id("new")
+    _legacy(store, col, old, "Stok modülü", "a.txt", sha="eski", dense=dense)
+
+    def vanished(cid, old_doc_id, *args, **kwargs):
+        # Someone deleted the old document between the listing and the replace.
+        store.delete_document(cid, old_doc_id)
+        raise LookupError(old_doc_id)
+
+    monkeypatch.setattr(store, "replace_document", vanished)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+
+
+def _vector_ids(dense):
+    return sorted(chunk_id for chunk_id, _ in dense.search(np.ones(64, dtype=np.float32), k=10))
+
+
+def _first_match_vanishes_once(store, dense, monkeypatch):
+    """The first replace finds its document gone (a concurrent delete); later calls are real."""
+    real_replace = store.replace_document
+    vanished = []
+
+    def replace_after_a_concurrent_delete(cid, old_doc_id, *args, **kwargs):
+        if not vanished:
+            vanished.append(old_doc_id)
+            store.delete_document(cid, old_doc_id)
+            dense.delete([f"{old_doc_id}-0"])
+        return real_replace(cid, old_doc_id, *args, **kwargs)
+
+    monkeypatch.setattr(store, "replace_document", replace_after_a_concurrent_delete)
+
+
+def test_a_match_vanishing_mid_job_is_skipped_and_the_next_match_is_replaced(tmp_path, monkeypatch):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    first, second, new = _doc_id("first"), _doc_id("second"), _doc_id("new")
+    _legacy(store, col, first, "Sipariş modülü", "a.txt", sha="x1", dense=dense)
+    _legacy(store, col, second, "Başka metin", "a.txt", sha="x2", dense=dense)
+    _first_match_vanishes_once(store, dense, monkeypatch)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+    assert all(vector_id.startswith(new) for vector_id in _vector_ids(dense))
+
+
+def test_a_match_by_hash_vanishing_mid_job_does_not_fail_the_upload(tmp_path, monkeypatch):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    first, second, new = _doc_id("first"), _doc_id("second"), _doc_id("new")
+    _legacy(store, col, first, "Sipariş modülü", "a.txt", sha="x1", dense=dense)
+    _legacy(store, col, second, "Stok modülü", "diger.txt", dense=dense)
+    _first_match_vanishes_once(store, dense, monkeypatch)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+    assert all(vector_id.startswith(new) for vector_id in _vector_ids(dense))
+
+
+def test_the_vectors_of_every_extra_match_are_dropped_after_a_committed_replace(tmp_path):
+    store = SqliteStore(tmp_path / "s.sqlite3")
+    col = store.create_collection("c")["id"]
+    dense = NumpyDenseBackend()
+    doc_file = tmp_path / "a.txt"
+    doc_file.write_text("Stok modülü", encoding="utf-8")
+    first, second, new = _doc_id("first"), _doc_id("second"), _doc_id("new")
+    _legacy(store, col, first, "Sipariş modülü", "a.txt", sha="x1", dense=dense)
+    _legacy(store, col, second, "Stok modülü", "diger.txt", dense=dense)
+    job = store.create_job(col, new)
+    assert _run(store, dense, doc_file, job, col, new) is True
+    assert store.get_job(job)["state"] == "done"
+    assert [d["id"] for d in store.list_documents(col)] == [new]
+    assert all(vector_id.startswith(new) for vector_id in _vector_ids(dense))

@@ -26,9 +26,10 @@ WORKSPACE_STRINGS = {
         "This file can't be shown, only its text.",
     ),
     "viewer.oldDocument": (
-        "Bu belge görüntüleyiciden önce eklendi. Burada görmek için belgeyi kaldırıp yeniden ekleyin.",
-        "This document was added before the viewer existed. Remove it and add it again to see it here.",
+        "Bu belge görüntüleyiciden önce eklendi. Burada görmek için dosyayı yeniden ekleyin.",
+        "This document was added before the viewer existed. Add the file again to see it here.",
     ),
+    "viewer.pageDivider": ("Sayfa {page}", "Page {page}"),
     "viewer.noHighlight": (
         "Sayfa açıldı, ama cevap cümlesi sayfada işaretlenemedi.",
         "The page is open, but the answer sentence could not be marked on it.",
@@ -177,6 +178,56 @@ def test_document_text_returns_the_body_and_rejects_with_the_code(page, base_url
         """,
     )
     assert result == ["Merhaba metin", "file_not_found", 404]
+
+
+@pytest.mark.e2e
+def test_document_passages_return_the_pages_and_reject_with_the_code(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        """
+        const { createApi } = await import('/js/api.js');
+        const body = { pages: [{ page: 2, text: 'Metin' }] };
+        const ok = createApi({
+          fetchImpl: async () =>
+            new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } }),
+        });
+        const got = await ok.documentPassages('c1', 'd1');
+        const missing = createApi({
+          fetchImpl: async () =>
+            new Response(JSON.stringify({ detail: 'document_not_found' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+        });
+        let code = '';
+        let status = 0;
+        try {
+          await missing.documentPassages('c1', 'd1');
+        } catch (error) {
+          code = error.code;
+          status = error.status;
+        }
+        const broken = createApi({
+          fetchImpl: async () => {
+            throw new TypeError('offline');
+          },
+        });
+        let networkCode = '';
+        try {
+          await broken.documentPassages('c1', 'd1');
+        } catch (error) {
+          networkCode = error.code;
+        }
+        return [got, code, status, networkCode];
+        """,
+    )
+    assert result == [
+        {"pages": [{"page": 2, "text": "Metin"}]},
+        "document_not_found",
+        404,
+        "network_error",
+    ]
 
 
 @pytest.mark.e2e

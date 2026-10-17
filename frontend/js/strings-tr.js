@@ -126,7 +126,8 @@ export const TR = Object.freeze({
   "viewer.fitWidth": "Genişliğe sığdır",
   "viewer.loading": "Belge açılıyor…",
   "viewer.cantShow": "Bu dosya gösterilemiyor, yalnızca metni var.",
-  "viewer.oldDocument": "Bu belge görüntüleyiciden önce eklendi. Burada görmek için belgeyi kaldırıp yeniden ekleyin.",
+  "viewer.oldDocument": "Bu belge görüntüleyiciden önce eklendi. Burada görmek için dosyayı yeniden ekleyin.",
+  "viewer.pageDivider": "Sayfa {page}",
   "viewer.noHighlight": "Sayfa açıldı, ama cevap cümlesi sayfada işaretlenemedi.",
   "viewer.selectionAsk": "Bu metni soru olarak yaz",
 

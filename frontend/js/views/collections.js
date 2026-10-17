@@ -72,7 +72,7 @@ export function mountCollectionsView(store, actions) {
     },
     ["selectedCollectionId", "collections", "collectionsLoaded"],
   );
-  // Says in step 1 which folder is in use when it is not the default one.
+  // Says in the documents pane which folder is in use when it is not the default one.
   store.subscribe(
     (state) => {
       const other = !usesDefaultLibrary(state);

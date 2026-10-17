@@ -1,4 +1,4 @@
-// Use cases of step 1: check files, send them one after another and follow each ingestion job.
+// Use cases of the documents pane: check files, send them one after another and follow each ingestion job.
 import { JOB_MAX_POLL_FAILURES, JOB_MAX_WAIT_MS, JOB_POLL_MS } from "../config.js";
 import { ApiError } from "../errors.js";
 import { t } from "../i18n.js";
@@ -29,7 +29,7 @@ export function createUploadActions({
 }) {
   let nextId = 1;
 
-  // Every change of a row is announced to screen readers through the live line of step 1.
+  // Every change of a row is announced to screen readers through the live line of the documents pane.
   function publish(uploads, row) {
     store.set({
       uploads,

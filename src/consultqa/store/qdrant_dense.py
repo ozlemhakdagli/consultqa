@@ -1,14 +1,22 @@
 """Qdrant-backed dense vector store: the service's dense index, behind the DenseBackend protocol."""
 
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
+from typing import Any
 
 import httpx
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.http.exceptions import ResponseHandlingException
-from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    Filter,
+    HasIdCondition,
+    PointIdsList,
+    PointStruct,
+    VectorParams,
+)
 
 # Fixed namespace so that a chunk id always maps to the same Qdrant point id.
 POINT_NAMESPACE = uuid.UUID("2af8b78d-4a1c-4f7d-be13-f6e1c5c73e40")
@@ -69,14 +77,23 @@ class QdrantDenseBackend:
                 points_selector=PointIdsList(points=[_point_id(chunk_id) for chunk_id in ids]),
             )
 
-    def search(self, vector: np.ndarray, k: int) -> list[tuple[str, float]]:
+    def search(
+        self, vector: np.ndarray, k: int, *, allowed: Collection[str] | None = None
+    ) -> list[tuple[str, float]]:
         if k <= 0:
             return []
+        extra: dict[str, Any] = {}
+        if allowed is not None:
+            if not allowed:
+                return []
+            point_ids = [_point_id(chunk_id) for chunk_id in sorted(allowed)]
+            extra["query_filter"] = Filter(must=[HasIdCondition(has_id=point_ids)])
         with _reachable():
             response = self._client.query_points(
                 collection_name=self._collection,
                 query=np.asarray(vector, dtype=np.float32).tolist(),
                 limit=k,
+                **extra,
             )
         return [(point.payload["chunk_id"], float(point.score)) for point in response.points]
 

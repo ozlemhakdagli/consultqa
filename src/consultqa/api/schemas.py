@@ -97,6 +97,19 @@ class PresetInfo(BaseModel):
     uses_llm: bool
 
 
+class DocumentTextPage(BaseModel):
+    """The passages of one page of a document; ``page`` is None for a text or Markdown file."""
+
+    page: int | None
+    text: str
+
+
+class DocumentText(BaseModel):
+    """The passages of a document in reading order, grouped by page."""
+
+    pages: list[DocumentTextPage]
+
+
 class Capabilities(BaseModel):
     """What the page may offer: readiness, upload limits and the methods that can be used."""
 

@@ -207,3 +207,66 @@ def test_one_original_that_cannot_be_removed_does_not_stop_the_rest(
     assert svc.originals.path(third) is None
     assert svc.originals.path(failing) is not None
     assert any(failing in record.getMessage() for record in caplog.records)
+
+
+class _RecordingBackend:
+    """Wraps a backend and records the ``k`` and ``allowed`` of every search."""
+
+    def __init__(self, inner: NumpyDenseBackend) -> None:
+        self._inner = inner
+        self.calls: list[tuple[int, set[str] | None]] = []
+
+    def upsert(self, ids, vectors):
+        self._inner.upsert(ids, vectors)
+
+    def delete(self, ids):
+        self._inner.delete(ids)
+
+    def search(self, vector, k, *, allowed=None):
+        self.calls.append((k, None if allowed is None else set(allowed)))
+        return self._inner.search(vector, k, allowed=allowed)
+
+    def drop(self):
+        self._inner.drop()
+
+
+def test_restricted_channel_asks_the_backend_for_k_with_allowed():
+    inner = NumpyDenseBackend()
+    other_ids = [f"o{n}" for n in range(60)]
+    target_ids = [f"t{n}" for n in range(5)]
+    inner.upsert(other_ids, np.tile(np.array([1.0, 0.01], dtype=np.float32), (60, 1)))
+    inner.upsert(target_ids, np.tile(np.array([0.0, 1.0], dtype=np.float32), (5, 1)))
+    backend = _RecordingBackend(inner)
+    chunks = {cid: _chunk(cid, "other") for cid in other_ids}
+    chunks.update({cid: _chunk(cid, "target") for cid in target_ids})
+    folder = DenseChannel(chunks, _FixedEncoder(np.array([1.0, 0.0], dtype=np.float32)), backend)
+
+    scoped = folder.restricted({cid: chunks[cid] for cid in target_ids})
+    scoped.search("q", 3)
+    assert backend.calls == [(3, set(target_ids))]
+
+
+def test_unscoped_channel_asks_the_backend_for_k_without_allowed():
+    inner = NumpyDenseBackend()
+    other_ids = [f"o{n}" for n in range(60)]
+    inner.upsert(other_ids, np.tile(np.array([1.0, 0.01], dtype=np.float32), (60, 1)))
+    backend = _RecordingBackend(inner)
+    chunks = {cid: _chunk(cid, "other") for cid in other_ids}
+    folder = DenseChannel(chunks, _FixedEncoder(np.array([1.0, 0.0], dtype=np.float32)), backend)
+
+    folder.search("q", 3)
+    assert backend.calls == [(3, None)]
+
+
+def test_a_document_with_few_hits_still_gets_k_results():
+    backend = NumpyDenseBackend()
+    other_ids = [f"o{n}" for n in range(60)]
+    backend.upsert(other_ids, np.tile(np.array([1.0, 0.01], dtype=np.float32), (60, 1)))
+    backend.upsert(["t0", "t1"], np.array([[0.0, 1.0], [0.1, 1.0]], dtype=np.float32))
+    chunks = {cid: _chunk(cid, "other") for cid in other_ids}
+    chunks["t0"] = _chunk("t0", "target")
+    chunks["t1"] = _chunk("t1", "target")
+    folder = DenseChannel(chunks, _FixedEncoder(np.array([1.0, 0.0], dtype=np.float32)), backend)
+
+    scoped = folder.restricted({"t0": chunks["t0"], "t1": chunks["t1"]})
+    assert sorted(h.chunk.chunk_id for h in scoped.search("q", 5)) == ["t0", "t1"]

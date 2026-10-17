@@ -126,7 +126,8 @@ export const EN = Object.freeze({
   "viewer.fitWidth": "Fit width",
   "viewer.loading": "Opening the document…",
   "viewer.cantShow": "This file can't be shown, only its text.",
-  "viewer.oldDocument": "This document was added before the viewer existed. Remove it and add it again to see it here.",
+  "viewer.oldDocument": "This document was added before the viewer existed. Add the file again to see it here.",
+  "viewer.pageDivider": "Page {page}",
   "viewer.noHighlight": "The page is open, but the answer sentence could not be marked on it.",
   "viewer.selectionAsk": "Use this text as a question",
 

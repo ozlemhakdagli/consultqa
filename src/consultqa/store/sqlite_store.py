@@ -151,14 +151,6 @@ class SqliteStore:
             ).fetchone()
         return row is not None
 
-    def find_document_by_hash(self, cid: str, sha: str) -> str | None:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT id FROM documents WHERE collection_id = ? AND content_sha256 = ?",
-                (cid, sha),
-            ).fetchone()
-        return row["id"] if row else None
-
     def add_document(
         self,
         cid: str,
@@ -172,30 +164,39 @@ class SqliteStore:
     ) -> None:
         """Insert a document and its chunks in one transaction."""
         with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO documents"
-                " (id, collection_id, content_sha256, filename, created_at, page_count,"
-                " has_original)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (doc_id, cid, sha, filename, _now(), page_count, int(has_original)),
+            _insert_document(conn, cid, doc_id, sha, filename, chunks, page_count, has_original)
+
+    def replace_document(
+        self,
+        cid: str,
+        old_doc_id: str,
+        doc_id: str,
+        sha: str,
+        filename: str,
+        chunks: Sequence[Chunk],
+        *,
+        page_count: int | None = None,
+        has_original: bool = False,
+        also_delete: Sequence[str] = (),
+    ) -> None:
+        """Delete document ``old_doc_id`` and insert the new one, in one transaction.
+
+        ``also_delete`` lists further documents of the folder to remove in the same transaction,
+        so that the new hash cannot collide with one of them. The old documents' chunks go with
+        them. If ``old_doc_id`` is not in this collection, LookupError is raised and nothing
+        changes. A failed insert rolls the deletions back too.
+        """
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM documents WHERE id = ? AND collection_id = ?", (old_doc_id, cid)
             )
+            if cur.rowcount == 0:
+                raise LookupError(old_doc_id)
             conn.executemany(
-                "INSERT INTO chunks"
-                " (chunk_id, document_id, collection_id, position, heading_json, text, page)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (
-                        c.chunk_id,
-                        doc_id,
-                        cid,
-                        c.position,
-                        json.dumps(list(c.heading_path), ensure_ascii=False),
-                        c.text,
-                        c.page,
-                    )
-                    for c in chunks
-                ],
+                "DELETE FROM documents WHERE id = ? AND collection_id = ?",
+                [(extra, cid) for extra in also_delete],
             )
+            _insert_document(conn, cid, doc_id, sha, filename, chunks, page_count, has_original)
 
     def list_documents(self, cid: str) -> list[dict]:
         with self._connect() as conn:
@@ -234,6 +235,16 @@ class SqliteStore:
                 " WHERE c.collection_id = ?"
                 " ORDER BY d.created_at, d.id, c.position",
                 (cid,),
+            ).fetchall()
+        return [_chunk_from_row(row) for row in rows]
+
+    def document_chunks(self, cid: str, doc_id: str) -> list[Chunk]:
+        """The passages of one document in position order; empty for an unknown document."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT chunk_id, document_id, position, heading_json, text, page FROM chunks"
+                " WHERE collection_id = ? AND document_id = ? ORDER BY position",
+                (cid, doc_id),
             ).fetchall()
         return [_chunk_from_row(row) for row in rows]
 
@@ -306,6 +317,42 @@ class SqliteStore:
                 (job_id,),
             ).fetchone()
         return dict(row) if row else None
+
+
+def _insert_document(
+    conn: sqlite3.Connection,
+    cid: str,
+    doc_id: str,
+    sha: str,
+    filename: str,
+    chunks: Sequence[Chunk],
+    page_count: int | None,
+    has_original: bool,
+) -> None:
+    """Insert one document row and its chunk rows on an open transaction."""
+    conn.execute(
+        "INSERT INTO documents"
+        " (id, collection_id, content_sha256, filename, created_at, page_count, has_original)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (doc_id, cid, sha, filename, _now(), page_count, int(has_original)),
+    )
+    conn.executemany(
+        "INSERT INTO chunks"
+        " (chunk_id, document_id, collection_id, position, heading_json, text, page)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (
+                c.chunk_id,
+                doc_id,
+                cid,
+                c.position,
+                json.dumps(list(c.heading_path), ensure_ascii=False),
+                c.text,
+                c.page,
+            )
+            for c in chunks
+        ],
+    )
 
 
 def _ensure_columns(conn: sqlite3.Connection) -> None:

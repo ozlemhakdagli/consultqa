@@ -1,4 +1,4 @@
-// Step 1 document list: the unfinished, failed and ready documents of the selected library in one
+// Documents pane document list: the unfinished, failed and ready documents of the selected library in one
 // list. Each row has its plain status and one button: "Sil" for a ready document, "Kapat" for a
 // failed or duplicate upload.
 import { el, byId, setVisible, showMessage } from "../dom.js";

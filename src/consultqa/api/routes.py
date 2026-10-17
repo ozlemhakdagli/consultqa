@@ -22,6 +22,8 @@ from consultqa.api.schemas import (
     Capabilities,
     Citation,
     CreateCollection,
+    DocumentText,
+    DocumentTextPage,
     PresetInfo,
     RelatedPage,
     SearchRequest,
@@ -256,6 +258,28 @@ def build_router(services: Services, semaphore: threading.BoundedSemaphore) -> A
             headers=FILE_HEADERS,
         )
 
+    @router.get("/collections/{cid}/documents/{doc_id}/text", response_model=DocumentText)
+    def document_text_passages(cid: str, doc_id: str) -> DocumentText:
+        """The passages of a document grouped by page, for a text fallback. Needs no model.
+
+        The document is looked up as stored first, so a malformed or foreign id is 404.
+        """
+        require_collection(cid)
+        require_document(cid, doc_id)
+        # Consecutive passages of one page form one entry; the passages of an entry are joined.
+        groups: list[tuple[int | None, list[str]]] = []
+        for chunk in services.store.document_chunks(cid, doc_id):
+            if groups and groups[-1][0] == chunk.page:
+                groups[-1][1].append(chunk.text)
+            else:
+                groups.append((chunk.page, [chunk.text]))
+        return DocumentText(
+            pages=[
+                DocumentTextPage(page=page, text=_display_text("\n\n".join(texts)))
+                for page, texts in groups
+            ]
+        )
+
     @router.delete("/collections/{cid}/documents/{doc_id}", status_code=204)
     def remove_document(cid: str, doc_id: str) -> Response:
         """Delete a document with its vectors, its chunks and its original file."""
@@ -420,13 +444,32 @@ def _ask_response(answer: Answer, preset: str, started: float) -> AskResponse:
     )
 
 
+_IMAGE_PLACEHOLDER = "<!-- image -->"
+
+
+def _display_text(text: str) -> str:
+    """Passage text as a reader should see it: Docling's image placeholder lines are dropped.
+
+    Display only. The stored chunk and its content hash keep the placeholder.
+    """
+    lines = text.split("\n")
+    if not any(line.strip() == _IMAGE_PLACEHOLDER for line in lines):
+        return text
+    kept = [line for line in lines if line.strip() != _IMAGE_PLACEHOLDER]
+    while kept and not kept[0].strip():
+        kept.pop(0)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    return "\n".join(kept)
+
+
 def _citation(number: int, chunk: Chunk) -> Citation:
     return Citation(
         number=number,
         chunk_id=chunk.chunk_id,
         doc_id=chunk.doc_id,
         heading_path=list(chunk.heading_path),
-        text=chunk.text,
+        text=_display_text(chunk.text),
         page=chunk.page,
     )
 

@@ -11,6 +11,7 @@ from ui_helpers import (
     open_page,
     unique,
     upload_and_wait,
+    upload_text,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -183,3 +184,58 @@ def test_at_800px_the_tabs_show_one_pane_at_a_time(make_page, base_url):
     expect(page.locator("#pane-chat")).to_be_visible()
     expect(page.locator("#pane-documents")).to_be_hidden()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth") is True
+
+
+@pytest.mark.e2e
+@pytest.mark.usefixtures("fast_job_polling")
+def test_a_missing_document_closes_the_viewer_and_reloads_the_list(page, base_url):
+    # main.js passes `documents` to the ask actions: a scoped question that finds no document
+    # closes the open viewer and asks the server for the document list again.
+    cid = collection_with_document(page, base_url)
+    _open_document(page, "ocak.md")
+    expect(page.locator("#viewer-title")).to_have_text("ocak.md")
+    expect(page.locator("#scope-document")).to_be_checked()
+    page.route(
+        f"**/api/collections/{cid}/ask",
+        lambda route: route.fulfill(status=404, json={"detail": "document_not_found"}),
+    )
+
+    with page.expect_request(
+        lambda request: (
+            request.method == "GET" and request.url.endswith(f"/api/collections/{cid}/documents")
+        )
+    ):
+        _ask(page)
+
+    expect(page.locator("#viewer-empty")).to_be_visible()
+    expect(page.locator("#viewer-title")).to_have_text("Belge")
+    expect(page.locator("#viewer-toolbar")).to_be_hidden()
+
+
+@pytest.mark.e2e
+@pytest.mark.usefixtures("fast_job_polling")
+def test_a_replaced_open_document_returns_the_viewer_to_empty(page, base_url):
+    # A re-upload replaces an old document with a new row. The list the page loads next no longer
+    # has the open document's id, so the viewer must return to its empty state; the new row with
+    # the same name is listed and can be opened.
+    cid = collection_with_document(page, base_url)
+    _open_document(page, "ocak.md")
+    expect(page.locator("#viewer-title")).to_have_text("ocak.md")
+
+    def replaced_row(route):
+        if route.request.method != "GET":
+            route.continue_()
+            return
+        response = route.fetch()
+        rows = response.json()
+        for row in rows:
+            if row["filename"] == "ocak.md":
+                row["id"] = "replaced" + row["id"]
+        route.fulfill(response=response, json=rows)
+
+    page.route(f"**/api/collections/{cid}/documents", replaced_row)
+    upload_text(page, "diger.md")
+
+    expect(page.locator("#viewer-empty")).to_be_visible()
+    expect(page.locator("#viewer-title")).to_have_text("Belge")
+    expect(page.get_by_role("button", name="ocak.md belgesini aç")).to_be_visible()

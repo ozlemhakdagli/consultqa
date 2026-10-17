@@ -24,7 +24,6 @@ def test_failed_add_leaves_no_rows(tmp_path):
     dup = [Chunk("x#0", "x", 0, (), "t"), Chunk("x#0", "x", 1, (), "u")]  # same chunk_id twice
     with pytest.raises(sqlite3.IntegrityError):
         store.add_document(col["id"], "x", "sha", "f.txt", dup)
-    assert store.find_document_by_hash(col["id"], "sha") is None
     assert store.list_chunks(col["id"]) == []
 
 
@@ -33,7 +32,6 @@ def test_delete_cascades_and_hash_is_reusable(tmp_path):
     store = _store(tmp_path)
     col = store.create_collection("a")
     store.add_document(col["id"], "x", "sha", "f.txt", [Chunk("x#0", "x", 0, (), "t")])
-    assert store.find_document_by_hash(col["id"], "sha") == "x"
     assert store.delete_document(col["id"], "x") is True
     assert store.list_chunks(col["id"]) == []
     store.add_document(col["id"], "y", "sha", "f.txt", [Chunk("y#0", "y", 0, (), "t")])

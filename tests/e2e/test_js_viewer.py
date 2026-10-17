@@ -40,6 +40,8 @@ const { mountViewerView } = await import('/js/views/viewer.js');
 const { mountDocumentsView } = await import('/js/views/documents.js');
 const { t } = await import('/js/i18n.js');
 const text = (answer) => ({ ok: true, text: async () => answer });
+const json = (body) => ({ ok: true, json: async () => body });
+const passagesOf = (pages) => ({ ok: true, json: async () => ({ pages }) });
 // A fake viewer factory: every call of the viewer is logged in order. A behaviour can be a value or
 // a function (open, highlight) or a count of failing creations (createFailures).
 function fakeFactory(log, behaviour = {}) {
@@ -260,7 +262,7 @@ def test_old_document_without_original_creates_no_viewer(page, base_url):
         + """
         const log = [];
         const { factory, created } = fakeFactory(log);
-        const api = createApi({ fetchImpl: async () => text('') });
+        const api = createApi({ fetchImpl: async () => json({ pages: [{ page: null, text: 'Eski metin' }] }) });
         const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
         const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
         mountViewerView(store, actions, { createViewer: factory, api });
@@ -423,7 +425,7 @@ def test_late_mark_does_not_overwrite_an_old_document(page, base_url):
         const { factory } = fakeFactory(log, {
           highlight: () => new Promise((resolve) => { release = resolve; }),
         });
-        const api = createApi({ fetchImpl: async () => text('') });
+        const api = createApi({ fetchImpl: async () => passagesOf([{ page: null, text: 'Eski metin' }]) });
         const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
         const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
         mountViewerView(store, actions, { createViewer: factory, api });
@@ -922,3 +924,434 @@ def test_viewer_heading_is_never_empty(page, base_url):
     assert result["reset"] == result["idleExpected"]
     assert result["language"] == result["languageExpected"] != ""
     assert result["language"] != result["languageBefore"]
+
+
+PASSAGES = """
+const PAGES = [
+  { page: 1, text: 'Birinci sayfa metni' },
+  { page: 2, text: 'İkinci sayfa\\n\\nikinci paragraf' },
+];
+"""
+
+
+def test_rejected_pdf_open_shows_the_note_and_the_passages_with_dividers(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + PASSAGES
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        const api = createApi({ fetchImpl: async () => passagesOf(PAGES) });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        const pre = byId('viewer-text');
+        const expected = [
+          `${t('viewer.pageDivider', { page: 1 })}\\nBirinci sayfa metni`,
+          `${t('viewer.pageDivider', { page: 2 })}\\nİkinci sayfa\\n\\nikinci paragraf`,
+        ].join('\\n\\n');
+        return {
+          status: store.get().viewerStatus,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.cantShow'),
+          text: pre.textContent,
+          expected,
+          preHidden: pre.hidden,
+          canvasHidden: byId('viewer-canvas').hidden,
+          elements: pre.children.length,
+        };
+        """,
+    )
+    assert result["status"] == "failed"
+    assert result["shown"] == result["expectedNote"]
+    assert result["preHidden"] is False
+    assert result["canvasHidden"] is True
+    assert result["elements"] == 0
+    assert result["text"] == result["expected"]
+
+
+def test_old_document_shows_its_note_and_the_passages_without_dividers_for_null_pages(
+    page, base_url
+):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory, created } = fakeFactory(log);
+        const api = createApi({ fetchImpl: async () => passagesOf([{ page: null, text: 'Eski metin' }]) });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d2');
+        await settle();
+        const pre = byId('viewer-text');
+        return {
+          created: created.length,
+          status: store.get().viewerStatus,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.oldDocument'),
+          text: pre.textContent,
+          preHidden: pre.hidden,
+        };
+        """,
+    )
+    assert result["created"] == 0
+    assert result["status"] == "old"
+    assert result["shown"] == result["expectedNote"]
+    assert result["preHidden"] is False
+    assert result["text"] == "Eski metin"
+
+
+def test_failing_passages_request_shows_only_the_cant_show_message(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        const api = createApi({
+          fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({ detail: 'internal_error' }) }),
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        return {
+          status: store.get().viewerStatus,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.cantShow'),
+          hidden: byId('viewer-message').hidden,
+          text: byId('viewer-text').textContent,
+          textHidden: byId('viewer-text').hidden,
+        };
+        """,
+    )
+    assert result["status"] == "failed"
+    assert result["shown"] == result["expectedNote"]
+    assert result["hidden"] is False
+    assert result["text"] == ""
+    assert result["textHidden"] is True
+
+
+def test_document_without_passages_shows_only_the_cant_show_message(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        const api = createApi({ fetchImpl: async () => passagesOf([]) });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        return { status: store.get().viewerStatus, shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.cantShow'),
+          textHidden: byId('viewer-text').hidden };
+        """,
+    )
+    assert result["status"] == "failed"
+    assert result["shown"] == result["expectedNote"]
+    assert result["textHidden"] is True
+
+
+def test_passage_html_is_shown_as_text_never_as_markup(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        const hostile = "<img src=x onerror=\\"window.__ran = true\\"><b>kalın</b>";
+        const api = createApi({ fetchImpl: async () => passagesOf([{ page: 1, text: hostile }]) });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        const pre = byId('viewer-text');
+        return { text: pre.textContent, elements: pre.querySelectorAll('*').length, ran: window.__ran === true,
+          expected: `${t('viewer.pageDivider', { page: 1 })}\n${hostile}` };
+        """,
+    )
+    assert result["text"] == result["expected"]
+    assert result["elements"] == 0
+    assert result["ran"] is False
+
+
+def test_superseded_pdf_failure_never_overwrites_a_newer_view(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + PASSAGES
+        + """
+        const log = [];
+        let rejectOpen;
+        const { factory } = fakeFactory(log, {
+          open: () => new Promise((resolve, reject) => { rejectOpen = reject; }),
+        });
+        const api = createApi({
+          fetchImpl: async (url) => (String(url).endsWith('/text') ? passagesOf(PAGES) : text('Metin')),
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        actions.viewer.openDocument('t1');
+        await settle();
+        rejectOpen(new Error('late'));
+        await settle();
+        return {
+          status: store.get().viewerStatus,
+          shown: byId('viewer-message').textContent,
+          messageHidden: byId('viewer-message').hidden,
+          text: byId('viewer-text').textContent,
+        };
+        """,
+    )
+    assert result["status"] == "text"
+    assert result["messageHidden"] is True
+    assert result["text"] == "Metin"
+
+
+def test_superseded_passages_never_overwrite_a_newer_view(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + PASSAGES
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        let releasePassages;
+        const api = createApi({
+          fetchImpl: async (url) => {
+            if (String(url).endsWith('/text')) {
+              return new Promise((resolve) => { releasePassages = () => resolve(passagesOf(PAGES)); });
+            }
+            return text('Metin');
+          },
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        actions.viewer.openDocument('t1');
+        await settle();
+        releasePassages();
+        await settle();
+        return {
+          status: store.get().viewerStatus,
+          text: byId('viewer-text').textContent,
+          shown: byId('viewer-message').textContent,
+          messageHidden: byId('viewer-message').hidden,
+        };
+        """,
+    )
+    assert result["status"] == "text"
+    assert result["text"] == "Metin"
+    assert result["messageHidden"] is True
+
+
+def test_old_document_whose_passages_fail_keeps_its_note_and_hides_the_text(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory, created } = fakeFactory(log);
+        const api = createApi({
+          fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({ detail: 'internal_error' }) }),
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d2');
+        await settle();
+        return {
+          created: created.length,
+          status: store.get().viewerStatus,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.oldDocument'),
+          text: byId('viewer-text').textContent,
+          textHidden: byId('viewer-text').hidden,
+        };
+        """,
+    )
+    assert result["created"] == 0
+    assert result["status"] == "old"
+    assert result["shown"] == result["expectedNote"]
+    assert result["text"] == ""
+    assert result["textHidden"] is True
+
+
+def test_language_switch_redraws_the_dividers_without_refetching(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + PASSAGES
+        + """
+        const { setLanguage } = await import('/js/i18n.js');
+        setLanguage('tr');
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        let fetches = 0;
+        const api = createApi({
+          fetchImpl: async () => {
+            fetches += 1;
+            return passagesOf(PAGES);
+          },
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS, lang: 'tr' });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        const before = byId('viewer-text').textContent;
+        setLanguage('en');
+        store.set({ lang: 'en' });
+        await settle();
+        return {
+          fetches,
+          before,
+          after: byId('viewer-text').textContent,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.cantShow'),
+          expectedDivider: t('viewer.pageDivider', { page: 1 }),
+        };
+        """,
+    )
+    assert result["fetches"] == 1
+    assert result["before"].startswith("Sayfa 1")
+    assert result["after"].startswith("Page 1\nBirinci")
+    assert "Sayfa" not in result["after"]
+    assert result["shown"] == result["expectedNote"]
+
+
+def test_passages_are_fetched_once_across_a_pane_switch(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + PASSAGES
+        + """
+        const log = [];
+        const { factory } = fakeFactory(log, { openError: true });
+        let fetches = 0;
+        const api = createApi({
+          fetchImpl: async () => {
+            fetches += 1;
+            return passagesOf(PAGES);
+          },
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS, activePane: 'viewer' });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d1');
+        await settle();
+        const first = byId('viewer-text').textContent;
+        store.set({ activePane: 'chat' });
+        await settle();
+        store.set({ activePane: 'viewer' });
+        await settle();
+        return {
+          fetches,
+          first,
+          after: byId('viewer-text').textContent,
+          textHidden: byId('viewer-text').hidden,
+        };
+        """,
+    )
+    assert result["fetches"] == 1
+    assert result["after"] == result["first"]
+    assert result["textHidden"] is False
+
+
+def test_text_file_that_cannot_be_read_shows_its_passages_with_the_cant_show_note(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const log = [];
+        const { factory, created } = fakeFactory(log);
+        // The file read drops; the passages of the same document are still there.
+        const api = createApi({
+          fetchImpl: async (url) => (String(url).endsWith('/text')
+            ? passagesOf([{ page: 1, text: 'Pasaj bir' }])
+            : (() => { throw new TypeError('dropped'); })()),
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} } };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('t1');
+        await settle();
+        return {
+          created: created.length,
+          status: store.get().viewerStatus,
+          text: byId('viewer-text').textContent,
+          textHidden: byId('viewer-text').hidden,
+          shown: byId('viewer-message').textContent,
+          expectedNote: t('viewer.cantShow'),
+          expectedText: `${t('viewer.pageDivider', { page: 1 })}\nPasaj bir`,
+        };
+        """,
+    )
+    assert result["created"] == 0
+    assert result["status"] == "failed"
+    assert result["text"] == result["expectedText"]
+    assert result["textHidden"] is False
+    assert result["shown"] == result["expectedNote"]
+
+
+def test_passages_answering_document_not_found_close_the_viewer_and_reload_the_list(page, base_url):
+    result = run_js(
+        page,
+        base_url,
+        BUILD
+        + """
+        const { VIEWER_CLOSED } = await import('/js/state.js');
+        const log = [];
+        const { factory } = fakeFactory(log);
+        // The old document has no original, so its passages are the only request: the document is gone.
+        const api = createApi({
+          fetchImpl: async () => ({ ok: false, status: 404, json: async () => ({ detail: 'document_not_found' }) }),
+        });
+        const store = createStore({ ...INITIAL_STATE, selectedCollectionId: 'c1', documents: DOCUMENTS });
+        let reloads = 0;
+        const documents = { loadDocuments: async () => { reloads += 1; } };
+        const actions = { viewer: createViewerActions({ api, store }), ask: { setDraft() {} }, documents };
+        mountViewerView(store, actions, { createViewer: factory, api });
+        actions.viewer.openDocument('d2');
+        await settle();
+        const state = store.get();
+        return {
+          openDocId: state.openDocId,
+          viewerStatus: state.viewerStatus,
+          closedKeys: Object.keys(VIEWER_CLOSED).every((key) => state[key] === VIEWER_CLOSED[key]),
+          messageHidden: byId('viewer-message').hidden,
+          reloads,
+        };
+        """,
+    )
+    assert result["openDocId"] == ""
+    assert result["viewerStatus"] == "idle"
+    assert result["closedKeys"] is True
+    assert result["messageHidden"] is True
+    assert result["reloads"] == 1

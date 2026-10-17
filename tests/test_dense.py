@@ -77,3 +77,34 @@ def test_concurrent_loads_build_the_model_once():
         thread.join(timeout=10)
     assert len(built) == 1
     assert len({id(model) for model in models}) == 1 and len(models) == 8
+
+
+def test_numpy_search_with_allowed_ranks_only_those_ids():
+    backend = NumpyDenseBackend()
+    backend.upsert(
+        ["a", "b", "c", "d"],
+        np.array([[1, 0], [0.9, 0.1], [0.5, 0.5], [0, 1]], dtype=np.float32),
+    )
+    query = np.array([1, 0], dtype=np.float32)
+    # "a" scores best but is outside ``allowed``, so it is never returned.
+    assert [cid for cid, _ in backend.search(query, k=2, allowed={"b", "c"})] == ["b", "c"]
+    assert [cid for cid, _ in backend.search(query, k=5, allowed={"zz", "b"})] == ["b"]
+    assert [cid for cid, _ in backend.search(query, k=1, allowed={"c", "d"})] == ["c"]
+    assert len(backend.search(query, k=2, allowed={"b", "c", "d"})) == 2
+
+
+def test_numpy_search_with_empty_allowed_is_empty():
+    backend = NumpyDenseBackend()
+    backend.upsert(["a", "b"], np.eye(2, dtype=np.float32))
+    assert backend.search(np.array([1, 0], dtype=np.float32), k=3, allowed=set()) == []
+
+
+def test_numpy_search_without_allowed_is_unchanged():
+    backend = NumpyDenseBackend()
+    backend.upsert(
+        ["a", "b", "c", "d"],
+        np.array([[1, 0], [0.9, 0.1], [0.5, 0.5], [0, 1]], dtype=np.float32),
+    )
+    query = np.array([1, 0], dtype=np.float32)
+    assert [cid for cid, _ in backend.search(query, k=4)] == ["a", "b", "c", "d"]
+    assert backend.search(query, k=3) == backend.search(query, k=3, allowed=None)

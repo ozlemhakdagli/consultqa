@@ -1,5 +1,6 @@
 """Document workspace over HTTP: original files, document kinds, page citations and scoping."""
 
+import hashlib
 import uuid
 from pathlib import Path
 
@@ -351,3 +352,163 @@ def test_a_key_error_without_a_scope_stays_an_internal_error(services, monkeypat
         assert ask.status_code == 500 and ask.json() == {"detail": "internal_error"}
         search = client.post(f"/api/collections/{cid}/search", json={"query": "Stok"})
         assert search.status_code == 500 and search.json() == {"detail": "internal_error"}
+
+
+def test_a_legacy_document_is_replaced_by_the_same_text_uploaded_again(client, services):
+    cid = _collection(client)
+    old = uuid.uuid4().hex
+    chunk = Chunk(
+        chunk_id=f"{old}-0",
+        doc_id=old,
+        position=0,
+        heading_path=("Stok",),
+        text="Stok modülü performans.",
+    )
+    digest = hashlib.sha256(TEXT_NOTE.decode("utf-8").encode("utf-8")).hexdigest()
+    services.store.add_document(cid, old, digest, "notlar.md", [chunk], has_original=False)
+    services.dense(cid).upsert([chunk.chunk_id], services.encoder.encode_passages([chunk.text]))
+    services.invalidate(cid)
+    assert _upload_bytes(client, cid, TEXT_NOTE, "notlar.md", "text/markdown").status_code == 202
+    listed = client.get(f"/api/collections/{cid}/documents").json()
+    assert len(listed) == 1 and listed[0]["id"] != old
+    assert listed[0]["has_original"] is True
+    assert all(c.doc_id == listed[0]["id"] for c in services.store.list_chunks(cid))
+
+
+# The text fallback: a document's passages grouped by page, with the same id checks as the file.
+def test_text_of_a_pdf_groups_its_passages_by_page(tmp_path, pdf_client):
+    cid = _collection(pdf_client)
+    source = _write_three_page_pdf(tmp_path)
+    _upload_bytes(pdf_client, cid, source.read_bytes(), "rehber.pdf", "application/pdf")
+    doc = _doc_ids(pdf_client, cid)[0]
+    r = pdf_client.get(f"/api/collections/{cid}/documents/{doc}/text")
+    assert r.status_code == 200
+    pages = r.json()["pages"]
+    # Page 3 is blank and has no passage, so it has no entry.
+    assert [p["page"] for p in pages] == [1, 2, 4]
+    assert "Sipariş modülü tablo filtreleme." in pages[0]["text"]
+    assert pages[1]["text"] == "Stok modülü performans."
+
+
+def test_text_of_a_markdown_upload_is_one_entry_without_page(client, services):
+    cid = _collection(client)
+    _upload_bytes(client, cid, TEXT_NOTE, "notlar.md", "text/markdown")
+    doc = _doc_ids(client, cid)[0]
+    r = client.get(f"/api/collections/{cid}/documents/{doc}/text")
+    assert r.status_code == 200
+    (entry,) = r.json()["pages"]
+    assert entry["page"] is None
+    assert "Stok modülü performans." in entry["text"]
+
+
+def test_text_joins_the_passages_of_one_page_with_a_blank_line(client, services):
+    cid = _collection(client)
+    chunks = [
+        Chunk("x#0", "x", 0, (), "birinci", page=1),
+        Chunk("x#1", "x", 1, (), "ikinci", page=1),
+        Chunk("x#2", "x", 2, (), "üçüncü", page=2),
+    ]
+    services.store.add_document(cid, "x", "sha", "rehber.pdf", chunks, page_count=2)
+    r = client.get(f"/api/collections/{cid}/documents/x/text")
+    assert r.status_code == 200
+    assert r.json() == {
+        "pages": [{"page": 1, "text": "birinci\n\nikinci"}, {"page": 2, "text": "üçüncü"}]
+    }
+
+
+def test_text_of_a_document_without_original_is_still_served(client, services):
+    cid = _collection(client)
+    chunks = [Chunk("x#0", "x", 0, (), "eski metin")]
+    services.store.add_document(cid, "x", "sha", "eski.txt", chunks, has_original=False)
+    r = client.get(f"/api/collections/{cid}/documents/x/text")
+    assert r.status_code == 200
+    assert r.json() == {"pages": [{"page": None, "text": "eski metin"}]}
+
+
+def test_text_of_an_unknown_collection_is_404(client):
+    r = client.get(f"/api/collections/missing/documents/{uuid.uuid4().hex}/text")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "collection_not_found"}
+
+
+def test_text_of_an_unknown_document_is_404(client):
+    cid = _collection(client)
+    r = client.get(f"/api/collections/{cid}/documents/{uuid.uuid4().hex}/text")
+    assert r.status_code == 404
+    assert r.json() == {"detail": "document_not_found"}
+
+
+@pytest.mark.parametrize(
+    ("hostile", "detail"),
+    [
+        ("..%2f..%2fx", "not_found"),
+        ("..%25252f..%25252fx", "document_not_found"),
+        ("..%5c..%5cx", "document_not_found"),
+        ("a" * 200, "document_not_found"),
+    ],
+)
+def test_hostile_ids_on_the_text_endpoint_are_404(client, hostile, detail):
+    cid = _collection(client)
+    _upload_bytes(client, cid, TEXT_NOTE, "notlar.md", "text/markdown")
+    r = client.get(f"/api/collections/{cid}/documents/{hostile}/text")
+    assert r.status_code == 404
+    assert r.json() == {"detail": detail}
+
+
+def test_upper_case_id_and_a_foreign_folders_document_are_404_on_text(client):
+    mine = _collection(client, "mine")
+    theirs = _collection(client, "theirs")
+    _upload_bytes(client, theirs, TEXT_NOTE, "notlar.md", "text/markdown")
+    foreign = _doc_ids(client, theirs)[0]
+    r = client.get(f"/api/collections/{mine}/documents/{foreign}/text")
+    assert r.status_code == 404 and r.json() == {"detail": "document_not_found"}
+    r = client.get(f"/api/collections/{theirs}/documents/{foreign.upper()}/text")
+    assert r.status_code == 404 and r.json() == {"detail": "document_not_found"}
+
+
+def test_a_200_page_document_comes_back_in_one_response(tmp_path, pdf_client):
+    cid = _collection(pdf_client)
+    source = write_pdf(tmp_path / "uzun.pdf", [[("p", f"Sayfa {n} metni.")] for n in range(1, 201)])
+    _upload_bytes(pdf_client, cid, source.read_bytes(), "uzun.pdf", "application/pdf")
+    doc = _doc_ids(pdf_client, cid)[0]
+    r = pdf_client.get(f"/api/collections/{cid}/documents/{doc}/text")
+    assert r.status_code == 200
+    pages = r.json()["pages"]
+    assert [p["page"] for p in pages] == list(range(1, 201))
+    assert pages[199]["text"] == "Sayfa 200 metni."
+
+
+# Docling writes image placeholders as lines of their own. They are hidden in responses only;
+# the stored chunk keeps them, so the content hash of the document does not change.
+PLACEHOLDER_NOTE = "# Stok\n\n<!-- image -->\n\nStok modülü performans.\n".encode()
+
+
+def test_citation_text_hides_the_image_placeholder_and_keeps_the_text(client, services):
+    cid = _collection(client)
+    _upload_bytes(client, cid, PLACEHOLDER_NOTE, "notlar.md", "text/markdown")
+    body = client.post(f"/api/collections/{cid}/ask", json={"question": "Stok", "preset": "L2"})
+    text = body.json()["citations"][0]["text"]
+    assert "<!-- image -->" not in text
+    assert "Stok modülü performans." in text
+    assert any("<!-- image -->" in c.text for c in services.store.list_chunks(cid))
+
+
+def test_text_endpoint_hides_the_image_placeholder_but_storage_keeps_it(client, services):
+    cid = _collection(client)
+    _upload_bytes(client, cid, PLACEHOLDER_NOTE, "notlar.md", "text/markdown")
+    doc = _doc_ids(client, cid)[0]
+    r = client.get(f"/api/collections/{cid}/documents/{doc}/text")
+    assert r.status_code == 200
+    (entry,) = r.json()["pages"]
+    assert "<!-- image -->" not in entry["text"]
+    assert entry["text"].endswith("Stok modülü performans.")
+    stored = [c.text for c in services.store.document_chunks(cid, doc)]
+    assert any("<!-- image -->" in text for text in stored)
+
+
+def test_text_without_a_placeholder_is_returned_unchanged(client, services):
+    cid = _collection(client)
+    chunks = [Chunk("x#0", "x", 0, (), "  birinci\n\nikinci  ")]
+    services.store.add_document(cid, "x", "sha", "eski.txt", chunks, has_original=False)
+    r = client.get(f"/api/collections/{cid}/documents/x/text")
+    assert r.json() == {"pages": [{"page": None, "text": "  birinci\n\nikinci  "}]}

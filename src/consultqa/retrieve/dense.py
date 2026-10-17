@@ -1,7 +1,7 @@
 """Dense retrieval: sentence encoders, an exact numpy vector index and the dense channel."""
 
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -38,8 +38,13 @@ class DenseBackend(Protocol):
         """Remove the vectors of the given ids; unknown ids are ignored."""
         ...
 
-    def search(self, vector: np.ndarray, k: int) -> list[tuple[str, float]]:
-        """Return up to ``k`` ``(id, cosine)`` pairs, best first."""
+    def search(
+        self, vector: np.ndarray, k: int, *, allowed: Collection[str] | None = None
+    ) -> list[tuple[str, float]]:
+        """Return up to ``k`` ``(id, cosine)`` pairs, best first.
+
+        With ``allowed``, only those ids are ranked; ``allowed=None`` ranks every id.
+        """
         ...
 
     def drop(self) -> None:
@@ -74,7 +79,9 @@ class NumpyDenseBackend:
             self._vectors.pop(chunk_id, None)
         self._cache = None
 
-    def search(self, vector: np.ndarray, k: int) -> list[tuple[str, float]]:
+    def search(
+        self, vector: np.ndarray, k: int, *, allowed: Collection[str] | None = None
+    ) -> list[tuple[str, float]]:
         if k <= 0 or not self._vectors:
             return []
         if self._cache is None:
@@ -83,7 +90,12 @@ class NumpyDenseBackend:
         ids, matrix = self._cache
         query = _normalise_rows(np.asarray(vector, dtype=np.float32))
         scores = matrix @ query
-        order = np.argsort(-scores, kind="stable")[:k]
+        if allowed is None:
+            order = np.argsort(-scores, kind="stable")[:k]
+            return [(ids[i], float(scores[i])) for i in order]
+        keep = np.fromiter((chunk_id in allowed for chunk_id in ids), dtype=bool, count=len(ids))
+        scores = np.where(keep, scores, -np.inf)
+        order = np.argsort(-scores, kind="stable")[: min(k, int(keep.sum()))]
         return [(ids[i], float(scores[i])) for i in order]
 
     def drop(self) -> None:
@@ -94,9 +106,9 @@ class NumpyDenseBackend:
 class DenseChannel:
     """Retrieves chunks by cosine similarity between the query and the passage vectors.
 
-    A channel made by ``restricted`` answers only for its own chunks. The backend then has to
-    rank the whole folder (``folder_size`` ids), because the folder's best-scoring ids may all
-    belong to other documents.
+    A channel made by ``restricted`` (``scoped``) answers only for its own chunks: the backend
+    ranks just those ids, so the best ``k`` of them come back even when other documents in the
+    folder score higher. An unscoped channel ranks every id the backend holds.
     """
 
     def __init__(
@@ -105,23 +117,25 @@ class DenseChannel:
         encoder: Encoder,
         backend: DenseBackend,
         *,
-        folder_size: int | None = None,
+        scoped: bool = False,
     ) -> None:
         self._chunks = chunks
         self._encoder = encoder
         self._backend = backend
-        self._folder_size = folder_size
+        self._scoped = scoped
 
     def restricted(self, chunks: Mapping[str, Chunk]) -> "DenseChannel":
         """A channel with the same encoder and backend that answers only for ``chunks``."""
-        folder_size = self._folder_size if self._folder_size is not None else len(self._chunks)
-        return DenseChannel(chunks, self._encoder, self._backend, folder_size=folder_size)
+        return DenseChannel(chunks, self._encoder, self._backend, scoped=True)
 
     def search(self, query: str, k: int) -> list[Hit]:
         vector = self._encoder.encode_query(query)
-        wanted = k if self._folder_size is None else max(k, self._folder_size)
+        if self._scoped:
+            ranked = self._backend.search(vector, k, allowed=set(self._chunks))
+        else:
+            ranked = self._backend.search(vector, k)
         hits: list[Hit] = []
-        for chunk_id, score in self._backend.search(vector, wanted):
+        for chunk_id, score in ranked:
             if len(hits) == k:
                 break
             chunk = self._chunks.get(chunk_id)

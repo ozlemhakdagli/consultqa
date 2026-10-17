@@ -20,10 +20,14 @@ export function createDocumentActions({ api, store }) {
     try {
       const documents = await api.listDocuments(collectionId);
       if (store.get().selectedCollectionId !== collectionId) return;
+      // A replaced or deleted document is no longer listed: the viewer then returns to empty.
+      const openId = store.get().openDocId;
+      const openGone = openId !== "" && !documents.some((document) => document.id === openId);
       store.set({
         documents,
         documentsLoaded: true,
         collections: withCount(store.get().collections, collectionId, documents.length),
+        ...(openGone ? VIEWER_CLOSED : {}),
       });
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;

@@ -140,18 +140,94 @@ def test_setdraft_fills_the_question_box_and_does_not_submit(page, base_url):
     assert result == ["Garanti süresi ne kadar?", True, 0]
 
 
-def test_setdraft_opens_the_chat_pane(page, base_url):
+# The question form, built with the ids of the DOM contract; the test mounts the view on it.
+ASK_FORM_ELEMENTS = """
+    const { mountAskView } = await import('/js/views/ask-form.js');
+    const form = fresh('form', 'ask-form');
+    const question = fresh('textarea', 'question');
+    const submit = fresh('button', 'ask-submit');
+    const reason = fresh('p', 'ask-reason'); reason.hidden = true;
+    const message = fresh('p', 'ask-message'); message.hidden = true;
+    const examples = fresh('div', 'example-list');
+    form.append(question, submit, reason, message, examples);
+    document.body.append(form);
+"""
+
+# The viewer pane, built with the ids of the DOM contract (index.html).
+VIEWER_ELEMENTS = """
+    const viewerNode = (tag, id) => { const node = fresh(tag, id); document.body.append(node); return node; };
+    viewerNode('h2', 'viewer-title'); viewerNode('div', 'viewer-toolbar');
+    viewerNode('input', 'viewer-page'); viewerNode('span', 'viewer-page-count');
+    viewerNode('button', 'viewer-zoom-out'); viewerNode('button', 'viewer-zoom-in');
+    viewerNode('button', 'viewer-fit'); viewerNode('div', 'viewer-canvas');
+    viewerNode('pre', 'viewer-text'); viewerNode('p', 'viewer-empty');
+    viewerNode('p', 'viewer-message'); viewerNode('button', 'selection-ask');
+"""
+
+
+def test_setdraft_opens_the_chat_pane_on_a_narrow_screen(page, base_url):
+    page.set_viewport_size({"width": 800, "height": 900})
     result = run_js(
         page,
         base_url,
         SETUP
+        + ASK_FORM_ELEMENTS
         + """
         const { store, actions } = make({ ask: async () => ANSWER }, { activePane: 'viewer' });
+        mountAskView(store, { ask: actions });
         actions.setDraft('Garanti süresi ne kadar?');
-        return [store.get().activePane, store.get().draft.text];
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        return [store.get().activePane, store.get().draft.text, document.activeElement === question];
         """,
     )
-    assert result == ["chat", "Garanti süresi ne kadar?"]
+    assert result == ["chat", "Garanti süresi ne kadar?", True]
+
+
+def test_setdraft_does_not_switch_the_pane_on_a_wide_screen(page, base_url):
+    page.set_viewport_size({"width": 1280, "height": 900})
+    result = run_js(
+        page,
+        base_url,
+        SETUP
+        + ASK_FORM_ELEMENTS
+        + VIEWER_ELEMENTS
+        + """
+        const { createViewerActions } = await import('/js/actions/viewer.js');
+        const { mountViewerView } = await import('/js/views/viewer.js');
+        const log = [];
+        const factory = async () => ({
+          page: 1, zoomValue: 'fit',
+          async open() { log.push('open'); return { pageCount: 3 }; },
+          goToPage(number) { this.page = number; },
+          currentPage() { return this.page; },
+          setZoom() { log.push('setZoom'); },
+          zoom() { return this.zoomValue; },
+          scale() { return 1; },
+          async highlight() { return true; },
+          clearHighlight() {},
+          destroy() {},
+        });
+        const api = {
+          documentFileUrl: () => '/file',
+          documentText: async () => '',
+        };
+        const documents = [{ id: 'd1', filename: 'ocak.pdf', kind: 'pdf', has_original: true, page_count: 3 }];
+        const { store, actions } = make({ ask: async () => ANSWER }, { activePane: 'viewer', documents });
+        const viewer = createViewerActions({ api, store });
+        mountAskView(store, { ask: actions });
+        mountViewerView(store, { viewer, ask: actions }, { createViewer: factory, api });
+        viewer.openPage({ docId: 'd1', page: 1, text: null });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const before = log.length;
+        actions.setDraft('Garanti süresi ne kadar?');
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        const paneAfterDraft = store.get().activePane;
+        viewer.openPage({ docId: 'd1', page: 2, text: null });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return [paneAfterDraft, log.slice(before).filter((entry) => entry === 'setZoom').length];
+        """,
+    )
+    assert result == ["viewer", 0]
 
 
 def test_renderanswer_gives_a_page_button_that_opens_the_marked_sentence(page, base_url):

@@ -60,7 +60,7 @@ export function hasUnfinishedUpload(state) {
   );
 }
 
-// The rows of step 1: the unfinished or failed uploads of the selected library, then its documents.
+// The rows of the documents pane: the unfinished or failed uploads of the selected library, then its documents.
 // A finished upload is not listed, because its document is.
 export function documentRows(state) {
   const uploads = state.uploads
@@ -92,14 +92,14 @@ export function rowStatusText(status, errorCode = null) {
   return t(`documents.status.${status === "done" ? "ready" : status}`);
 }
 
-// The first unmet prerequisite of step 1, or null when files can be added.
+// The first unmet prerequisite of the documents pane, or null when files can be added.
 export function uploadBlockReason(state) {
   if (!state.selectedCollectionId) return t("documents.reason.noLibrary");
   if (state.status !== "ready") return t("documents.reason.notReady");
   return null;
 }
 
-// The first unmet prerequisite of step 3, or null when a question can be asked.
+// The first unmet prerequisite of the chat pane, or null when a question can be asked.
 export function askBlockReason(state) {
   if (!state.selectedCollectionId) return t("ask.reason.noLibrary");
   if (state.status !== "ready") return t("ask.reason.notReady");

@@ -3,7 +3,7 @@
 // the pane and reused; opening another PDF replaces its document.
 import { byId, setVisible } from "../dom.js";
 import { createApi } from "../api.js";
-import { t } from "../i18n.js";
+import { currentLanguage, t } from "../i18n.js";
 import { documentInfo } from "../selectors.js";
 import { createPdfViewer } from "../viewer/pdf.js";
 
@@ -35,6 +35,10 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
   let pdfPromise = null;
   let pdf = null;
   let selectedText = "";
+  // The passages of the open document as fetched, and the language their dividers were drawn in;
+  // a language change draws them again from these, without a new request.
+  let passagePages = null;
+  let passageLang = null;
   let titleFilename = "";
   // The page, sentence and navigation token the open PDF was last moved to; a language change
   // leaves them alone.
@@ -138,11 +142,57 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
     renderNote();
   }
 
+  // The passages as one text: a divider line before each page that has a number, the passages of a
+  // page and the pages separated by a blank line. Drawn in the language in use now.
+  function renderPassages() {
+    textNode.textContent = passagePages
+      .map((entry) => {
+        const passage = String(entry?.text ?? "");
+        return typeof entry?.page === "number"
+          ? `${t("viewer.pageDivider", { page: entry.page })}\n${passage}`
+          : passage;
+      })
+      .join("\n\n");
+    passageLang = currentLanguage();
+  }
+
+  // Fetches the passages of a document once and shows them with the note and status of its case.
+  // When they cannot be had, the same note and status show without text: an old document keeps its
+  // note, a PDF that failed to load keeps its "can't be shown" note. A document deleted elsewhere
+  // closes the viewer and the document list is loaded again.
+  async function showPassages(collectionId, docId, seq, { status, note }) {
+    let body = null;
+    let gone = false;
+    try {
+      body = await api.documentPassages(collectionId, docId);
+    } catch (error) {
+      gone = error?.code === "document_not_found";
+      body = null;
+    }
+    if (gone) {
+      actions.viewer.forgetDocument(docId);
+      await actions.documents.loadDocuments();
+      return;
+    }
+    if (seq !== loadSeq) return;
+    const pages = Array.isArray(body?.pages) ? body.pages : [];
+    if (pages.length === 0) {
+      passagePages = null;
+      textNode.textContent = "";
+      present({ status, note });
+      return;
+    }
+    passagePages = pages;
+    renderPassages();
+    present({ status, textShown: true, note });
+  }
+
   async function showDocument(state) {
     const docId = state.openDocId;
     const seq = ++loadSeq;
     navigationSeq += 1;
     applied = null;
+    passagePages = null;
     const info = documentInfo(state).get(docId) ?? null;
     titleFilename = info?.filename ?? "";
     renderTitle();
@@ -156,11 +206,12 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
       present({ status: "idle" });
       return;
     }
+    const collectionId = state.selectedCollectionId;
     if (info !== null && !info.hasOriginal) {
-      present({ status: "old", note: "viewer.oldDocument" });
+      present({ status: "loading", note: "viewer.loading" });
+      await showPassages(collectionId, docId, seq, { status: "old", note: "viewer.oldDocument" });
       return;
     }
-    const collectionId = state.selectedCollectionId;
     if (info?.kind === "text") {
       present({ status: "loading", note: "viewer.loading" });
       try {
@@ -169,9 +220,7 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
         textNode.textContent = body;
         present({ status: "text", textShown: true });
       } catch {
-        if (seq !== loadSeq) return;
-        textNode.textContent = "";
-        present({ status: "failed", note: "viewer.cantShow" });
+        await showPassages(collectionId, docId, seq, { status: "failed", note: "viewer.cantShow" });
       }
       return;
     }
@@ -189,7 +238,7 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
       applyNavigation(store.get());
     } catch {
       if (seq !== loadSeq) return;
-      present({ status: "failed", note: "viewer.cantShow" });
+      await showPassages(collectionId, docId, seq, { status: "failed", note: "viewer.cantShow" });
     }
   }
 
@@ -200,6 +249,8 @@ export function mountViewerView(store, actions, { createViewer = createPdfViewer
       selectionButton.textContent = t("viewer.selectionAsk");
       renderNote();
       renderCount();
+      // A language change draws the dividers again; the passages are not requested a second time.
+      if (passagePages !== null && passageLang !== currentLanguage()) renderPassages();
       if (state.openDocId !== shownDocId) {
         shownDocId = state.openDocId;
         showDocument(state);

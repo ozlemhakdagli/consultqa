@@ -1,5 +1,6 @@
 // Use cases of the viewer: open a document, open a page with the sentence to mark, change the page,
 // and clear the mark. Each one only sets state; the viewer view does the rest.
+import { VIEWER_CLOSED } from "../state.js";
 
 export function createViewerActions({ store }) {
   // Each open gets a new navigation token, so the viewer moves to the page again even when the
@@ -38,5 +39,10 @@ export function createViewerActions({ store }) {
     store.set({ highlight: null });
   }
 
-  return { openDocument, openPage, setPage, clearHighlight };
+  // A document deleted elsewhere: when it is the open one, the viewer is closed.
+  function forgetDocument(docId) {
+    if (store.get().openDocId === docId) store.set(VIEWER_CLOSED);
+  }
+
+  return { openDocument, openPage, setPage, clearHighlight, forgetDocument };
 }
